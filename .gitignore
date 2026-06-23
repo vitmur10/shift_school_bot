@@ -1,0 +1,61 @@
+# ── Змінні середовища та секрети ─────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# Google service account ключі
+*.json
+!package.json
+!package-lock.json
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+.Python
+
+# Віртуальні середовища
+venv/
+.venv/
+env/
+.env/
+ENV/
+
+# Дистрибутив / упаковка
+dist/
+build/
+*.egg-info/
+*.egg
+.eggs/
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# mypy
+.mypy_cache/
+
+# ── Логи ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── IDE та редактори ──────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── Операційна система ────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Desktop.ini

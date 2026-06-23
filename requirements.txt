@@ -1,0 +1,6 @@
+aiogram>=3.0
+fastapi
+uvicorn[standard]
+gspread
+oauth2client
+pydantic-settings
