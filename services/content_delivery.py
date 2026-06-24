@@ -1,14 +1,13 @@
 """
-Доставка медіаконтенту етапу (відео-урок + кружечки) учаснику.
-
-Відео НЕ завантажується ботом — лише копіюється (copy_message) з
-адмін-каналу, де матеріали залиті вручну через звичайний Telegram-клієнт.
+Доставка медіаконтенту етапу учаснику.
 """
 
 from __future__ import annotations
 
 import logging
 from typing import Protocol
+
+from aiogram.types import InputMediaVideo
 
 from storage.models import ContentRef, Stage
 
@@ -26,18 +25,11 @@ class CopiesMessages(Protocol):
         caption: str | None = None,
     ) -> object: ...
 
-    async def forward_messages(
+    async def send_media_group(
         self,
         chat_id: int,
-        from_chat_id: int,
-        message_ids: list[int],
+        media: list,
     ) -> object: ...
-
-    async def send_message(self, chat_id: int, text: str) -> object: ...
-
-
-class ContentDeliveryError(Exception):
-    """Не вдалося доставити частину контенту."""
 
 
 async def deliver_stage_video(
@@ -47,41 +39,16 @@ async def deliver_stage_video(
     caption: str | None = None,
 ) -> bool:
     """
-    Надсилає відео етапу. caption (якщо є) передається першому відео.
-    Якщо caption довший за 1024 символи — ігнорується (має надсилатись окремо).
+    Надсилає відео етапу.
+    - Якщо є медіагрупа з file_id → send_media_group (справжній album)
+    - Якщо є медіагрупа без file_id → copy_message по черзі
+    - Якщо одне відео → copy_message
     """
     if caption and len(caption) > TELEGRAM_CAPTION_LIMIT:
         caption = None
 
     if stage.has_media_group():
-        refs = stage.active_media_group()
-        chat_ids = {ref.source_chat_id for ref in refs}
-
-        if len(chat_ids) == 1:
-            # всі з одного каналу — forward_messages дає справжній album
-            try:
-                await bot.forward_messages(
-                    chat_id=chat_id,
-                    from_chat_id=refs[0].source_chat_id,
-                    message_ids=[ref.source_message_id for ref in refs],
-                )
-                # caption надсилаємо окремим повідомленням після album
-                if caption:
-                    await bot.send_message(chat_id=chat_id, text=caption)
-                return True
-            except Exception:
-                logger.exception("forward_messages не вдалось для стейджу %s — пробую по черзі", stage.stage_id)
-
-        # fallback: по черзі через copy_message
-        ok = True
-        for i, ref in enumerate(refs):
-            ref_caption = caption if i == len(refs) - 1 else None
-            ok = ok and await _copy_ref(
-                bot, chat_id, ref,
-                label=f"media_group_{i+1} стейджу {stage.stage_id}",
-                caption=ref_caption,
-            )
-        return ok
+        return await _deliver_media_group(bot, chat_id, stage, caption)
 
     if stage.video_ref is None or not stage.video_ref.is_set():
         logger.warning("Stage %s: video_ref не заповнено — пропускаю", stage.stage_id)
@@ -95,7 +62,6 @@ async def deliver_stage_video(
 
 
 async def deliver_stage_circles(bot: CopiesMessages, chat_id: int, stage: Stage) -> int:
-    """Надсилає всі кружечки по черзі. Повертає кількість успішно надісланих."""
     delivered = 0
     for i, ref in enumerate(stage.active_circle_refs(), start=1):
         ok = await _copy_ref(bot, chat_id, ref, label=f"circle {i} стейджу {stage.stage_id}")
@@ -110,7 +76,6 @@ async def deliver_full_stage(
     stage: Stage,
     caption: str | None = None,
 ) -> dict[str, int | bool]:
-    """Доставляє відео/медіагрупу + кружечки. caption іде до першого відео."""
     video_ok = await deliver_stage_video(bot, chat_id, stage, caption=caption)
     circles_total = len(stage.active_circle_refs())
     circles_ok = await deliver_stage_circles(bot, chat_id, stage)
@@ -120,6 +85,46 @@ async def deliver_full_stage(
         "circles_delivered": circles_ok,
         "circles_total": circles_total,
     }
+
+
+async def _deliver_media_group(
+    bot: CopiesMessages,
+    chat_id: int,
+    stage: Stage,
+    caption: str | None = None,
+) -> bool:
+    refs = stage.active_media_group()
+
+    # якщо всі мають file_id — використовуємо send_media_group (справжній album)
+    all_have_file_id = all(ref.file_id for ref in refs)
+    if all_have_file_id:
+        try:
+            media = []
+            for i, ref in enumerate(refs):
+                # caption лише до останнього елементу
+                item_caption = caption if i == len(refs) - 1 else None
+                media.append(InputMediaVideo(
+                    media=ref.file_id,
+                    caption=item_caption,
+                ))
+            await bot.send_media_group(chat_id=chat_id, media=media)
+            return True
+        except Exception:
+            logger.exception(
+                "send_media_group не вдалось для стейджу %s — пробую copy_message",
+                stage.stage_id
+            )
+
+    # fallback: copy_message по черзі
+    ok = True
+    for i, ref in enumerate(refs):
+        ref_caption = caption if i == len(refs) - 1 else None
+        ok = ok and await _copy_ref(
+            bot, chat_id, ref,
+            label=f"media_group_{i+1} стейджу {stage.stage_id}",
+            caption=ref_caption,
+        )
+    return ok
 
 
 async def _copy_ref(
@@ -140,5 +145,8 @@ async def _copy_ref(
         await bot.copy_message(**kwargs)
         return True
     except Exception:
-        logger.exception("Не вдалося скопіювати контент (%s) учаснику chat_id=%s", label, chat_id)
+        logger.exception(
+            "Не вдалося скопіювати контент (%s) учаснику chat_id=%s",
+            label, chat_id
+        )
         return False

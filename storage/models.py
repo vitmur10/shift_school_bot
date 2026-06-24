@@ -27,30 +27,19 @@ class PlanType(str, Enum):
 @dataclass
 class ContentRef:
     """
-    Посилання на вихідне повідомлення в адмін-каналі/чаті, звідки бот
-    копіює контент учаснику через copy_message (Bot API).
+    Посилання на вихідне повідомлення в адмін-каналі або file_id.
 
-    Чому саме так, а не video_url/file_id напряму:
-      - file_id сам по собі ПРАЦЮЄ для send_video(file_id=...), але тоді
-        підпис (опис під відео) довелось би зберігати окремим полем і
-        формувати повідомлення вручну.
-      - copy_message(from_chat_id, message_id) копіює повідомлення
-        ЦІЛКОМ — разом з підписом, типом контенту (video/video_note/
-        document) і форматуванням — без потреби розрізняти на боці
-        бота, що саме це за тип файлу. Для цього потрібні саме
-        chat_id + message_id вихідного повідомлення, не file_id.
-
-    Адмін заливає відео ОДИН РАЗ вручну (через звичайний Telegram-клієнт,
-    не бота) у приватний канал, де бот має права адміна — тоді відео
-    зберігається на серверах Telegram і не має обмеження 50 МБ, яке
-    діє лише на ЗАВАНТАЖЕННЯ файлу через сам Bot API.
+    Є два способи використання:
+    - source_chat_id + source_message_id → copy_message (одне відео)
+    - file_id → send_media_group (справжній album без обмежень розміру)
     """
 
-    source_chat_id: int      # ID каналу/чату-сховища контенту (від'ємне число для каналів)
-    source_message_id: int   # ID конкретного повідомлення з відео всередині цього чату
+    source_chat_id: int
+    source_message_id: int
+    file_id: str | None = None  # якщо є — використовується для send_media_group
 
     def is_set(self) -> bool:
-        return bool(self.source_chat_id and self.source_message_id)
+        return bool(self.source_chat_id and self.source_message_id) or bool(self.file_id)
 
 
 @dataclass

@@ -70,6 +70,54 @@ async def handle_getid(message: Message, admin_ids: set[int]) -> None:
         )
 
 
+@router.message(Command("getfileid"))
+async def handle_getfileid(message: Message, admin_ids: set[int]) -> None:
+    """
+    Використання: перешліть відео з каналу боту, натисніть Reply
+    і напишіть /getfileid — бот поверне file_id для таблиці.
+
+    file_id зберігається в колонках media_1_file_id / media_2_file_id
+    у вкладці Stages і використовується для send_media_group (справжній album).
+    """
+    if message.from_user.id not in admin_ids:
+        await message.answer(ADMIN_ONLY)
+        return
+
+    target = message.reply_to_message or message
+
+    # витягуємо file_id залежно від типу медіа
+    file_id = None
+    media_type = None
+
+    if target.video:
+        file_id = target.video.file_id
+        media_type = "video"
+    elif target.video_note:
+        file_id = target.video_note.file_id
+        media_type = "video_note (кружечок)"
+    elif target.document:
+        file_id = target.document.file_id
+        media_type = "document"
+    elif target.photo:
+        file_id = target.photo[-1].file_id
+        media_type = "photo"
+
+    if file_id is None:
+        await message.answer(
+            "Як користуватись:\n"
+            "1. Перешліть відео з каналу боту\n"
+            "2. Натисніть Reply на те переслане відео\n"
+            "3. Напишіть /getfileid"
+        )
+        return
+
+    await message.answer(
+        f"✅ file_id для таблиці ({media_type}):\n\n"
+        f"`{file_id}`",
+        parse_mode="Markdown"
+    )
+
+
 @router.message(Command("refresh"))
 async def handle_refresh(message: Message, cache: CacheStore, sheets: SheetsClient, admin_ids: set[int]) -> None:
     if message.from_user.id not in admin_ids:
