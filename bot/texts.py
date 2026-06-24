@@ -68,18 +68,8 @@ NEXT_STAGE_BUTTON_TEXT = "Далі"
 
 
 def format_stage_message(stage: Stage) -> str:
-    """
-    Текст-обгортка одного етапу (іде ОКРЕМИМ повідомленням, а не разом
-    з відео — саме відео відправляється через copy_message у
-    bot/handlers/stages.py, бо текстовий caption там належить
-    вихідному повідомленню в адмін-каналі, а не формується тут).
-    """
-    lines = [
-        f"📚 {stage.title}",
-        "",
-        f"📝 Конспект: {stage.notes_text}",
-    ]
-    return "\n".join(lines)
+    """Повертає текст етапу — лише конспект, без зайвих заголовків."""
+    return stage.notes_text
 
 
 # ---- сповіщення (Тариф 2) ----
