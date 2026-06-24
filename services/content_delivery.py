@@ -48,7 +48,8 @@ async def deliver_stage_video(
         refs = stage.active_media_group()
         ok = True
         for i, ref in enumerate(refs):
-            ref_caption = caption if i == 0 else None
+            # caption на останньому відео — текст з'являється після перегляду всіх
+            ref_caption = caption if i == len(refs) - 1 else None
             ok = ok and await _copy_ref(
                 bot, chat_id, ref,
                 label=f"media_group_{i+1} стейджу {stage.stage_id}",
