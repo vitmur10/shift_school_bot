@@ -30,6 +30,43 @@ logger = logging.getLogger(__name__)
 router = Router(name="admin")
 
 
+@router.message(Command("getid"))
+async def handle_getid(message: Message, admin_ids: set[int]) -> None:
+    """
+    Команда для адміна: переслати повідомлення з контент-каналу боту
+    і написати /getid — бот відповість chat_id і message_id,
+    які потрібно вписати в таблицю Stages.
+    """
+    if message.from_user.id not in admin_ids:
+        await message.answer(ADMIN_ONLY)
+        return
+
+    fwd = message.forward_origin
+    if fwd is None:
+        await message.answer(
+            "Перешліть повідомлення з каналу боту і одразу напишіть /getid"
+        )
+        return
+
+    # aiogram 3.x: forward_origin може бути MessageOriginChannel
+    from aiogram.types import MessageOriginChannel
+    if isinstance(fwd, MessageOriginChannel):
+        chat_id = fwd.chat.id
+        message_id = fwd.message_id
+        await message.answer(
+            f"✅ Дані для таблиці:\n\n"
+            f"`chat_id:` `{chat_id}`\n"
+            f"`message_id:` `{message_id}`",
+            parse_mode="Markdown"
+        )
+    else:
+        await message.answer(
+            f"chat_id: {getattr(fwd, 'chat', {})}\n"
+            f"Тип: {type(fwd).__name__}\n\n"
+            f"Переслати потрібно саме з каналу, не від користувача."
+        )
+
+
 @router.message(Command("refresh"))
 async def handle_refresh(message: Message, cache: CacheStore, sheets: SheetsClient, admin_ids: set[int]) -> None:
     if message.from_user.id not in admin_ids:
