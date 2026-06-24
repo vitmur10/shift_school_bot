@@ -125,6 +125,17 @@ def build_cache_from_raw(
             _parse_content_ref(row.get("circle_3_chat_id"), row.get("circle_3_message_id")),
         ]
 
+        # медіагрупа — до 5 відео в одному повідомленні (як album у Telegram)
+        media_group = [
+            r for r in [
+                _parse_content_ref(row.get("media_1_chat_id"), row.get("media_1_message_id")),
+                _parse_content_ref(row.get("media_2_chat_id"), row.get("media_2_message_id")),
+                _parse_content_ref(row.get("media_3_chat_id"), row.get("media_3_message_id")),
+                _parse_content_ref(row.get("media_4_chat_id"), row.get("media_4_message_id")),
+                _parse_content_ref(row.get("media_5_chat_id"), row.get("media_5_message_id")),
+            ] if r is not None
+        ]
+
         stream.stages.append(Stage(
             stage_id=row.get("stage_id", ""),
             stream_id=stream_id,
@@ -133,6 +144,7 @@ def build_cache_from_raw(
             video_ref=_parse_content_ref(row.get("video_chat_id"), row.get("video_message_id")),
             notes_text=row.get("notes_text", ""),
             circle_refs=circle_refs,
+            media_group=media_group,
             unlock_button_text=row.get("unlock_button_text") or "Далі",
             is_active=_parse_bool(row.get("is_active", True)),
         ))

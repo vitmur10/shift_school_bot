@@ -61,15 +61,23 @@ class Stage:
     stream_id: str
     order: int
     title: str
-    video_ref: ContentRef | None      # основний відео-урок (None, якщо ще не залито)
+    video_ref: ContentRef | None      # одне основне відео (None якщо медіагрупа)
     notes_text: str
-    circle_refs: list[ContentRef] = field(default_factory=list)  # 2-3 кружечки
+    circle_refs: list[ContentRef] = field(default_factory=list)
+    media_group: list[ContentRef] = field(default_factory=list)  # кілька відео одним повідомленням
     unlock_button_text: str = "Далі"
     is_active: bool = True
 
     def active_circle_refs(self) -> list[ContentRef]:
-        """Повертає лише заповнені (заллиті) посилання на кружечки."""
+        """Повертає лише заповнені посилання на кружечки."""
         return [ref for ref in self.circle_refs if ref and ref.is_set()]
+
+    def active_media_group(self) -> list[ContentRef]:
+        """Повертає лише заповнені посилання медіагрупи."""
+        return [ref for ref in self.media_group if ref and ref.is_set()]
+
+    def has_media_group(self) -> bool:
+        return len(self.active_media_group()) > 1
 
 
 @dataclass
