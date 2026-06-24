@@ -63,14 +63,11 @@ async def handle_next_stage(
     )
 
     if has_video and len(text) <= TELEGRAM_CAPTION_LIMIT:
-        # текст іде як caption до першого відео
         await deliver_full_stage(bot, chat_id, stage, caption=text)
     elif has_video:
-        # текст довший за 1024 — надсилаємо окремо перед відео
         await callback.message.answer(text)
         await deliver_full_stage(bot, chat_id, stage)
     else:
-        # відео немає — лише текст
         await callback.message.answer(text)
 
     stream = cache.get_stream(participant.stream_id)

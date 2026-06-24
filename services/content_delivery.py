@@ -26,6 +26,15 @@ class CopiesMessages(Protocol):
         caption: str | None = None,
     ) -> object: ...
 
+    async def forward_messages(
+        self,
+        chat_id: int,
+        from_chat_id: int,
+        message_ids: list[int],
+    ) -> object: ...
+
+    async def send_message(self, chat_id: int, text: str) -> object: ...
+
 
 class ContentDeliveryError(Exception):
     """Не вдалося доставити частину контенту."""
@@ -46,13 +55,31 @@ async def deliver_stage_video(
 
     if stage.has_media_group():
         refs = stage.active_media_group()
+        chat_ids = {ref.source_chat_id for ref in refs}
+
+        if len(chat_ids) == 1:
+            # всі з одного каналу — forward_messages дає справжній album
+            try:
+                await bot.forward_messages(
+                    chat_id=chat_id,
+                    from_chat_id=refs[0].source_chat_id,
+                    message_ids=[ref.source_message_id for ref in refs],
+                )
+                # caption надсилаємо окремим повідомленням після album
+                if caption:
+                    await bot.send_message(chat_id=chat_id, text=caption)
+                return True
+            except Exception:
+                logger.exception("forward_messages не вдалось для стейджу %s — пробую по черзі", stage.stage_id)
+
+        # fallback: по черзі через copy_message
         ok = True
         for i, ref in enumerate(refs):
-            # caption передаємо кожному відео
+            ref_caption = caption if i == len(refs) - 1 else None
             ok = ok and await _copy_ref(
                 bot, chat_id, ref,
                 label=f"media_group_{i+1} стейджу {stage.stage_id}",
-                caption=caption,
+                caption=ref_caption,
             )
         return ok
 
