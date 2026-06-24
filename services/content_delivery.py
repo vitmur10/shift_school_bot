@@ -23,7 +23,6 @@ logger = logging.getLogger(__name__)
 
 class CopiesMessages(Protocol):
     async def copy_message(self, chat_id: int, from_chat_id: int, message_id: int) -> object: ...
-    async def forward_messages(self, chat_id: int, from_chat_id: int, message_ids: list[int]) -> object: ...
 
 
 class ContentDeliveryError(Exception):
@@ -59,23 +58,18 @@ async def deliver_media_group(bot: CopiesMessages, chat_id: int, stage: Stage) -
 
     try:
         from_chat_id = refs[0].source_chat_id
-        message_ids = [ref.source_message_id for ref in refs]
-        await bot.forward_messages(
-            chat_id=chat_id,
-            from_chat_id=from_chat_id,
-            message_ids=message_ids,
-        )
-        return True
-    except Exception:
-        logger.exception(
-            "Не вдалося надіслати медіагрупу стейджу %s — пробую по черзі",
-            stage.stage_id
-        )
-        # fallback: по черзі
+        # надсилаємо по черзі через copy_message — виглядає як власне повідомлення бота
+        # без позначки "Переслано від"
         ok = True
         for ref in refs:
-            ok = ok and await _copy_ref(bot, chat_id, ref, label=f"media_group fallback {stage.stage_id}")
+            ok = ok and await _copy_ref(bot, chat_id, ref, label=f"media_group стейджу {stage.stage_id}")
         return ok
+    except Exception:
+        logger.exception(
+            "Не вдалося надіслати медіагрупу стейджу %s",
+            stage.stage_id
+        )
+        return False
 
 
 async def deliver_stage_video(bot: CopiesMessages, chat_id: int, stage: Stage) -> bool:
