@@ -33,36 +33,39 @@ router = Router(name="admin")
 @router.message(Command("getid"))
 async def handle_getid(message: Message, admin_ids: set[int]) -> None:
     """
-    Команда для адміна: переслати повідомлення з контент-каналу боту
-    і написати /getid — бот відповість chat_id і message_id,
-    які потрібно вписати в таблицю Stages.
+    Використання: перешліть повідомлення з каналу, натисніть Reply на нього
+    і напишіть /getid — бот поверне chat_id і message_id.
     """
     if message.from_user.id not in admin_ids:
         await message.answer(ADMIN_ONLY)
         return
 
-    fwd = message.forward_origin
+    # шукаємо forward_origin або в reply, або в поточному повідомленні
+    target = message.reply_to_message or message
+    fwd = target.forward_origin
+
     if fwd is None:
         await message.answer(
-            "Перешліть повідомлення з каналу боту і одразу напишіть /getid"
+            "Як користуватись:\n"
+            "1. Перешліть повідомлення з каналу боту\n"
+            "2. Натисніть Reply (відповісти) на те переслане повідомлення\n"
+            "3. Напишіть /getid"
         )
         return
 
-    # aiogram 3.x: forward_origin може бути MessageOriginChannel
     from aiogram.types import MessageOriginChannel
     if isinstance(fwd, MessageOriginChannel):
         chat_id = fwd.chat.id
         message_id = fwd.message_id
         await message.answer(
             f"✅ Дані для таблиці:\n\n"
-            f"`chat_id:` `{chat_id}`\n"
-            f"`message_id:` `{message_id}`",
+            f"chat_id: `{chat_id}`\n"
+            f"message_id: `{message_id}`",
             parse_mode="Markdown"
         )
     else:
         await message.answer(
-            f"chat_id: {getattr(fwd, 'chat', {})}\n"
-            f"Тип: {type(fwd).__name__}\n\n"
+            f"Тип пересилання: {type(fwd).__name__}\n"
             f"Переслати потрібно саме з каналу, не від користувача."
         )
 
