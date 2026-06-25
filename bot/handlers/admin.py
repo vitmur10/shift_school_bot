@@ -85,6 +85,16 @@ async def handle_getfileid(message: Message, admin_ids: set[int]) -> None:
 
     target = message.reply_to_message or message
 
+    # debug: логуємо що саме прийшло
+    logger.info(
+        "getfileid: target type=%s, has_video=%s, has_doc=%s, has_video_note=%s, forward_origin=%s",
+        type(target).__name__,
+        bool(target.video),
+        bool(target.document),
+        bool(target.video_note),
+        type(target.forward_origin).__name__ if target.forward_origin else None,
+    )
+
     # витягуємо file_id залежно від типу медіа
     file_id = None
     media_type = None
