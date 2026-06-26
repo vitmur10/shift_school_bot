@@ -1,5 +1,11 @@
 """
 Доставка медіаконтенту етапу учаснику.
+
+Логіка доставки:
+- 1 медіа з file_id → send_video з caption
+- 2+ медіа з file_id → send_media_group (album) з caption на першому
+- 1 медіа без file_id → copy_message з caption
+- 2+ медіа без file_id → copy_message по черзі БЕЗ caption (йдуть після тексту)
 """
 
 from __future__ import annotations
@@ -31,6 +37,13 @@ class CopiesMessages(Protocol):
         media: list,
     ) -> object: ...
 
+    async def send_video(
+        self,
+        chat_id: int,
+        video: str,
+        caption: str | None = None,
+    ) -> object: ...
+
 
 async def deliver_stage_video(
     bot: CopiesMessages,
@@ -38,18 +51,65 @@ async def deliver_stage_video(
     stage: Stage,
     caption: str | None = None,
 ) -> bool:
-    """
-    Надсилає відео етапу.
-    - Якщо є медіагрупа з file_id → send_media_group (справжній album)
-    - Якщо є медіагрупа без file_id → copy_message по черзі
-    - Якщо одне відео → copy_message
-    """
     if caption and len(caption) > TELEGRAM_CAPTION_LIMIT:
         caption = None
 
-    if stage.has_media_group():
-        return await _deliver_media_group(bot, chat_id, stage, caption)
+    active_media = stage.active_media_group()
 
+    # 2+ медіа
+    if len(active_media) > 1:
+        all_have_file_id = all(ref.file_id for ref in active_media)
+
+        if all_have_file_id:
+            # send_media_group з caption на першому
+            try:
+                logger.info(
+                    "send_media_group для стейджу %s: chat_id=%s, %d відео",
+                    stage.stage_id, chat_id, len(active_media)
+                )
+                media = []
+                for i, ref in enumerate(active_media):
+                    media.append(InputMediaVideo(
+                        media=ref.file_id,
+                        caption=caption if i == 0 else None,
+                    ))
+                await bot.send_media_group(chat_id=chat_id, media=media)
+                logger.info("send_media_group успішно для стейджу %s", stage.stage_id)
+                return True
+            except Exception as e:
+                logger.exception("send_media_group НЕ ВДАЛОСЬ для стейджу %s: %s", stage.stage_id, e)
+                # fallback нижче
+
+        # без file_id АБО після невдалого send_media_group:
+        # copy_message по черзі БЕЗ caption (текст вже надіслано окремо)
+        ok = True
+        for i, ref in enumerate(active_media):
+            ok = ok and await _copy_ref(
+                bot, chat_id, ref,
+                label=f"media_group_{i+1} стейджу {stage.stage_id}",
+                caption=None,
+            )
+        return ok
+
+    # 1 медіа
+    if len(active_media) == 1:
+        ref = active_media[0]
+        if ref.file_id:
+            try:
+                await bot.send_video(chat_id=chat_id, video=ref.file_id, caption=caption)
+                return True
+            except Exception:
+                logger.exception("send_video НЕ ВДАЛОСЬ для стейджу %s", stage.stage_id)
+                return False
+        else:
+            # copy_message з caption
+            return await _copy_ref(
+                bot, chat_id, ref,
+                label=f"media_1 стейджу {stage.stage_id}",
+                caption=caption,
+            )
+
+    # немає media_group — резерв через video_ref
     if stage.video_ref is None or not stage.video_ref.is_set():
         logger.warning("Stage %s: video_ref не заповнено — пропускаю", stage.stage_id)
         return False
@@ -81,50 +141,10 @@ async def deliver_full_stage(
     circles_ok = await deliver_stage_circles(bot, chat_id, stage)
     return {
         "video_delivered": video_ok,
-        "media_group": stage.has_media_group(),
+        "media_group": len(stage.active_media_group()) > 1,
         "circles_delivered": circles_ok,
         "circles_total": circles_total,
     }
-
-
-async def _deliver_media_group(
-    bot: CopiesMessages,
-    chat_id: int,
-    stage: Stage,
-    caption: str | None = None,
-) -> bool:
-    refs = stage.active_media_group()
-
-    # якщо всі мають file_id — використовуємо send_media_group (справжній album)
-    all_have_file_id = all(ref.file_id for ref in refs)
-    if all_have_file_id:
-        try:
-            media = []
-            for i, ref in enumerate(refs):
-                # caption лише до останнього елементу
-                item_caption = caption if i == len(refs) - 1 else None
-                media.append(InputMediaVideo(
-                    media=ref.file_id,
-                    caption=item_caption,
-                ))
-            await bot.send_media_group(chat_id=chat_id, media=media)
-            return True
-        except Exception:
-            logger.exception(
-                "send_media_group не вдалось для стейджу %s — пробую copy_message",
-                stage.stage_id
-            )
-
-    # fallback: copy_message по черзі
-    ok = True
-    for i, ref in enumerate(refs):
-        ref_caption = caption if i == len(refs) - 1 else None
-        ok = ok and await _copy_ref(
-            bot, chat_id, ref,
-            label=f"media_group_{i+1} стейджу {stage.stage_id}",
-            caption=ref_caption,
-        )
-    return ok
 
 
 async def _copy_ref(

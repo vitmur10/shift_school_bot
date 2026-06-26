@@ -69,17 +69,24 @@ def _parse_datetime(value) -> datetime | None:
     return None
 
 
-def _parse_content_ref(chat_id_raw, message_id_raw) -> "ContentRef | None":
+def _parse_content_ref(chat_id_raw, message_id_raw, file_id_raw=None) -> "ContentRef | None":
     """
-    Будує ContentRef з пари колонок Sheets. Повертає None, якщо хоч
-    одна з колонок порожня — означає, що відео для цього слоту ще не
-    залито адміном (нормальний стан під час наповнення курсу).
+    Будує ContentRef з колонок Sheets.
+    Якщо є file_id — використовується для send_media_group.
+    Якщо є chat_id + message_id — для copy_message.
     """
+    file_id = str(file_id_raw).strip() if file_id_raw else None
     chat_id = _parse_int(chat_id_raw, default=0)
     message_id = _parse_int(message_id_raw, default=0)
-    if not chat_id or not message_id:
+
+    if not file_id and not (chat_id and message_id):
         return None
-    return ContentRef(source_chat_id=chat_id, source_message_id=message_id)
+
+    return ContentRef(
+        source_chat_id=chat_id,
+        source_message_id=message_id,
+        file_id=file_id or None,
+    )
 
 
 def build_cache_from_raw(
@@ -125,16 +132,29 @@ def build_cache_from_raw(
             _parse_content_ref(row.get("circle_3_chat_id"), row.get("circle_3_message_id")),
         ]
 
-        # медіагрупа — до 5 відео в одному повідомленні (як album у Telegram)
+        # медіагрупа — до 10 елементів (ліміт Telegram)
         media_group = [
             r for r in [
-                _parse_content_ref(row.get("media_1_chat_id"), row.get("media_1_message_id")),
-                _parse_content_ref(row.get("media_2_chat_id"), row.get("media_2_message_id")),
-                _parse_content_ref(row.get("media_3_chat_id"), row.get("media_3_message_id")),
-                _parse_content_ref(row.get("media_4_chat_id"), row.get("media_4_message_id")),
-                _parse_content_ref(row.get("media_5_chat_id"), row.get("media_5_message_id")),
+                _parse_content_ref(row.get("media_1_chat_id"), row.get("media_1_message_id"), row.get("media_1_file_id")),
+                _parse_content_ref(row.get("media_2_chat_id"), row.get("media_2_message_id"), row.get("media_2_file_id")),
+                _parse_content_ref(row.get("media_3_chat_id"), row.get("media_3_message_id"), row.get("media_3_file_id")),
+                _parse_content_ref(row.get("media_4_chat_id"), row.get("media_4_message_id"), row.get("media_4_file_id")),
+                _parse_content_ref(row.get("media_5_chat_id"), row.get("media_5_message_id"), row.get("media_5_file_id")),
+                _parse_content_ref(row.get("media_6_chat_id"), row.get("media_6_message_id"), row.get("media_6_file_id")),
+                _parse_content_ref(row.get("media_7_chat_id"), row.get("media_7_message_id"), row.get("media_7_file_id")),
+                _parse_content_ref(row.get("media_8_chat_id"), row.get("media_8_message_id"), row.get("media_8_file_id")),
+                _parse_content_ref(row.get("media_9_chat_id"), row.get("media_9_message_id"), row.get("media_9_file_id")),
+                _parse_content_ref(row.get("media_10_chat_id"), row.get("media_10_message_id"), row.get("media_10_file_id")),
             ] if r is not None
         ]
+
+        if media_group:
+            logger.info(
+                "Stage %s: знайдено media_group (%d елементів), file_ids: %s",
+                row.get("stage_id"),
+                len(media_group),
+                [ref.file_id for ref in media_group],
+            )
 
         stream.stages.append(Stage(
             stage_id=row.get("stage_id", ""),

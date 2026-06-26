@@ -23,11 +23,11 @@ router = Router(name="stages")
 
 @router.callback_query(lambda c: c.data == NEXT_STAGE_CALLBACK)
 async def handle_next_stage(
-    callback: CallbackQuery,
-    cache: CacheStore,
-    queue: WriteQueue,
-    bot: CopiesMessages,
-    participant=None,
+        callback: CallbackQuery,
+        cache: CacheStore,
+        queue: WriteQueue,
+        bot: CopiesMessages,
+        participant=None,
 ) -> None:
     await callback.answer()
 
@@ -57,22 +57,52 @@ async def handle_next_stage(
     chat_id = callback.from_user.id
     text = format_stage_message(stage)
 
+    active_media = stage.active_media_group()
+    active_media_len = len(active_media)
     has_video = (
-        stage.has_media_group()
+        active_media_len > 0
         or (stage.video_ref is not None and stage.video_ref.is_set())
     )
 
-    if has_video and len(text) <= TELEGRAM_CAPTION_LIMIT:
-        await deliver_full_stage(bot, chat_id, stage, caption=text)
-    elif has_video:
-        await callback.message.answer(text)
-        await deliver_full_stage(bot, chat_id, stage)
-    else:
-        await callback.message.answer(text)
-
     stream = cache.get_stream(participant.stream_id)
     is_last = participant.current_stage_order >= stream.total_active_stages()
+
+    # визначаємо reply_markup для кнопки
+    next_btn = None if is_last else next_stage_keyboard(stage.unlock_button_text)
+
+    logger.info(
+        "Доставка стейджу %s: has_video=%s, has_media_group=%s, text_len=%d",
+        stage.stage_id, has_video, stage.has_media_group(), len(text)
+    )
+
+    if not has_video:
+        # немає відео — текст з кнопкою
+        if text:
+            await callback.message.answer(text, reply_markup=next_btn)
+        elif next_btn:
+            await callback.message.answer(stage.unlock_button_text, reply_markup=next_btn)
+    else:
+        multi_no_file_id = (
+            active_media_len > 1 and not all(ref.file_id for ref in active_media)
+        )
+
+        if multi_no_file_id or len(text) > TELEGRAM_CAPTION_LIMIT:
+            # текст окремо перед відео, кнопка після відео
+            if text:
+                await callback.message.answer(text)
+            await deliver_full_stage(bot, chat_id, stage, caption=None)
+            if is_last:
+                await callback.message.answer(COURSE_COMPLETED)
+            elif next_btn:
+                await callback.message.answer(stage.unlock_button_text, reply_markup=next_btn)
+            return
+        else:
+            # текст як caption до відео — але caption не підтримує reply_markup
+            # тому після відео надсилаємо кнопку окремо
+            await deliver_full_stage(bot, chat_id, stage, caption=text)
+
     if is_last:
         await callback.message.answer(COURSE_COMPLETED)
-    else:
-        await callback.message.answer("👇", reply_markup=next_stage_keyboard(stage.unlock_button_text))
+    elif next_btn and has_video:
+        # відео вже надіслано, кнопка окремим повідомленням
+        await callback.message.answer(stage.unlock_button_text, reply_markup=next_btn)

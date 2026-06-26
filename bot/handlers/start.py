@@ -64,12 +64,14 @@ async def handle_start(message: Message, cache: CacheStore, queue: WriteQueue, s
     result = identify_participant(cache, telegram_id=tg_id, telegram_username=username)
 
     if result.found:
-        # знайдено за tg_id (повторний /start) або за username -- в обох
-        # випадках прив'язка ідемпотентна для tg_id, що вже збігається,
-        # і виконує реальну прив'язку, якщо знайдено саме за username
-        participant = await bind_token_to_telegram(
-            cache, queue, result.participant, telegram_id=tg_id, telegram_username=username,
-        )
+        try:
+            participant = await bind_token_to_telegram(
+                cache, queue, result.participant, telegram_id=tg_id, telegram_username=username,
+            )
+        except TokenAlreadyUsedError:
+            # токен вже прив'язаний до іншого tg_id —
+            # але учасника вже знайдено, просто показуємо стан доступу
+            participant = result.participant
         await state.clear()
         await _show_access_state(message, cache, participant, is_first_time=False)
         return

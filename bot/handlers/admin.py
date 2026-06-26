@@ -123,8 +123,7 @@ async def handle_getfileid(message: Message, admin_ids: set[int]) -> None:
 
     await message.answer(
         f"✅ file_id для таблиці ({media_type}):\n\n"
-        f"`{file_id}`",
-        parse_mode="Markdown"
+        f"{file_id}"
     )
 
 
