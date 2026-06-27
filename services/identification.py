@@ -121,5 +121,5 @@ def _normalize_phone(phone: str) -> str:
     зрівняти не можна, тому Webflow-форма має або завжди слати з кодом
     країни, або тут варто додати explicit-конфіг дефолтного коду).
     """
-    digits = "".join(ch for ch in phone if ch.isdigit())
+    digits = "".join(ch for ch in str(phone) if ch.isdigit())
     return digits[-9:] if len(digits) >= 9 else digits
