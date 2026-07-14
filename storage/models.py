@@ -24,19 +24,40 @@ class PlanType(str, Enum):
     SCHEDULED = "scheduled"  # доступ відкривається в задану дату (групова активація)
 
 
+class MediaType(str, Enum):
+    VIDEO = "video"
+    VOICE = "voice"
+    AUDIO = "audio"
+    DOCUMENT = "document"
+    PHOTO = "photo"
+
+    @classmethod
+    def from_raw(cls, value: str | None, default: "MediaType" = None) -> "MediaType":
+        """Парсить рядок із Sheets; повертає default (або VIDEO) якщо порожньо/невідомо."""
+        if default is None:
+            default = cls.VIDEO
+        if not value:
+            return default
+        try:
+            return cls(str(value).strip().lower())
+        except ValueError:
+            return default
+
+
 @dataclass
 class ContentRef:
     """
     Посилання на вихідне повідомлення в адмін-каналі або file_id.
 
     Є два способи використання:
-    - source_chat_id + source_message_id → copy_message (одне відео)
-    - file_id → send_media_group (справжній album без обмежень розміру)
+    - source_chat_id + source_message_id → copy_message (universal fallback)
+    - file_id + media_type → send_video / send_voice / send_audio / send_media_group
     """
 
     source_chat_id: int
     source_message_id: int
-    file_id: str | None = None  # якщо є — використовується для send_media_group
+    file_id: str | None = None
+    media_type: MediaType = MediaType.VIDEO  # використовується при відправці через file_id
 
     def is_set(self) -> bool:
         return bool(self.source_chat_id and self.source_message_id) or bool(self.file_id)
@@ -53,7 +74,7 @@ class Stage:
     video_ref: ContentRef | None      # одне основне відео (None якщо медіагрупа)
     notes_text: str
     circle_refs: list[ContentRef] = field(default_factory=list)
-    media_group: list[ContentRef] = field(default_factory=list)  # кілька відео одним повідомленням
+    media_group: list[ContentRef] = field(default_factory=list)  # кілька медіа одним повідомленням
     unlock_button_text: str = "Далі"
     is_active: bool = True
 

@@ -14,9 +14,12 @@ HTTP-запит до Google заблокує весь event loop (і aiogram-pol
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Protocol
 
 from storage.write_queue import AppendRow, PendingWrite
+
+logger = logging.getLogger(__name__)
 
 
 class WorksheetLike(Protocol):
@@ -56,7 +59,10 @@ class SheetsClient:
         Повертає список словників (заголовок -> значення) для кожного рядка.
         Викликається з jobs/cache_refresh.py через asyncio.to_thread.
         """
-        return self._worksheet(sheet_name).get_all_records()
+        logger.debug("Читання всіх записів з листа %s", sheet_name)
+        records = self._worksheet(sheet_name).get_all_records()
+        logger.debug("Отримано %d рядків з листа %s", len(records), sheet_name)
+        return records
 
     def read_streams(self) -> list[dict[str, Any]]:
         return self.read_all_records(self.SHEET_STREAMS)
@@ -90,6 +96,10 @@ class SheetsClient:
                 {"range": f"{w.column}{w.row_index}", "values": [[w.value]]}
                 for w in items
             ]
+            logger.debug(
+                "batch_update у лист %s: %d комірок -> %r",
+                sheet_name, len(cell_updates), cell_updates,
+            )
             worksheet.batch_update(cell_updates)
 
     def apply_appends(self, appends: list[AppendRow]) -> None:
@@ -108,6 +118,10 @@ class SheetsClient:
 
         for sheet_name, rows in by_sheet.items():
             worksheet = self._worksheet(sheet_name)
+            logger.debug(
+                "append_rows у лист %s: %d рядків -> %r",
+                sheet_name, len(rows), rows,
+            )
             worksheet.append_rows(rows, value_input_option="USER_ENTERED")
 
     def apply_queue_snapshot(self, writes: list[PendingWrite], appends: list[AppendRow]) -> None:

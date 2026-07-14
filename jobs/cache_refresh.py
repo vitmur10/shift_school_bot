@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from storage.cache_store import CacheStore
 from storage.models import (
     ContentRef,
+    MediaType,
     Participant,
     ParticipantStatus,
     Plan,
@@ -69,11 +70,20 @@ def _parse_datetime(value) -> datetime | None:
     return None
 
 
-def _parse_content_ref(chat_id_raw, message_id_raw, file_id_raw=None) -> "ContentRef | None":
+def _parse_content_ref(
+    chat_id_raw,
+    message_id_raw,
+    file_id_raw=None,
+    media_type_raw=None,
+    default_media_type: MediaType = MediaType.VIDEO,
+) -> "ContentRef | None":
     """
     Будує ContentRef з колонок Sheets.
-    Якщо є file_id — використовується для send_media_group.
-    Якщо є chat_id + message_id — для copy_message.
+    - file_id + media_type → send_video / send_voice / send_audio
+    - chat_id + message_id → copy_message (universal fallback)
+
+    media_type_raw: рядок із колонки media_N_type / video_type.
+    Якщо порожньо — використовується default_media_type.
     """
     file_id = str(file_id_raw).strip() if file_id_raw else None
     chat_id = _parse_int(chat_id_raw, default=0)
@@ -82,10 +92,13 @@ def _parse_content_ref(chat_id_raw, message_id_raw, file_id_raw=None) -> "Conten
     if not file_id and not (chat_id and message_id):
         return None
 
+    media_type = MediaType.from_raw(media_type_raw, default=default_media_type)
+
     return ContentRef(
         source_chat_id=chat_id,
         source_message_id=message_id,
         file_id=file_id or None,
+        media_type=media_type,
     )
 
 
@@ -100,12 +113,13 @@ def build_cache_from_raw(
     -> заповнений CacheStore. Винесена окремо від async-обгортки нижче,
     щоб можна було юніт-тестити без жодного asyncio/мережі.
 
-    Очікувані колонки листа Stages для відео-контенту (замість прямих
-    URL — посилання на повідомлення в адмін-каналі, див. ContentRef):
-      video_chat_id, video_message_id           — основний відео-урок
-      circle_1_chat_id, circle_1_message_id     — кружечок 1
-      circle_2_chat_id, circle_2_message_id     — кружечок 2
-      circle_3_chat_id, circle_3_message_id     — кружечок 3 (опційно)
+    Очікувані колонки листа Stages для медіаконтенту:
+      video_chat_id, video_message_id, video_type        — основний медіафайл
+      circle_1_chat_id, circle_1_message_id              — кружечок 1
+      circle_2_chat_id, circle_2_message_id              — кружечок 2
+      circle_3_chat_id, circle_3_message_id              — кружечок 3 (опційно)
+      media_N_chat_id, media_N_message_id,
+        media_N_file_id, media_N_type                    — медіагрупа (N = 1..10)
     """
     cache = CacheStore()
 
@@ -123,7 +137,10 @@ def build_cache_from_raw(
         stream_id = str(row.get("stream_id", "")).strip()
         stream = cache.streams.get(stream_id)
         if stream is None:
-            logger.warning("Stage %r посилається на невідомий stream_id=%r — пропущено", row.get("stage_id"), stream_id)
+            logger.warning(
+                "Stage %r посилається на невідомий stream_id=%r — пропущено",
+                row.get("stage_id"), stream_id,
+            )
             continue
 
         circle_refs = [
@@ -135,25 +152,55 @@ def build_cache_from_raw(
         # медіагрупа — до 10 елементів (ліміт Telegram)
         media_group = [
             r for r in [
-                _parse_content_ref(row.get("media_1_chat_id"), row.get("media_1_message_id"), row.get("media_1_file_id")),
-                _parse_content_ref(row.get("media_2_chat_id"), row.get("media_2_message_id"), row.get("media_2_file_id")),
-                _parse_content_ref(row.get("media_3_chat_id"), row.get("media_3_message_id"), row.get("media_3_file_id")),
-                _parse_content_ref(row.get("media_4_chat_id"), row.get("media_4_message_id"), row.get("media_4_file_id")),
-                _parse_content_ref(row.get("media_5_chat_id"), row.get("media_5_message_id"), row.get("media_5_file_id")),
-                _parse_content_ref(row.get("media_6_chat_id"), row.get("media_6_message_id"), row.get("media_6_file_id")),
-                _parse_content_ref(row.get("media_7_chat_id"), row.get("media_7_message_id"), row.get("media_7_file_id")),
-                _parse_content_ref(row.get("media_8_chat_id"), row.get("media_8_message_id"), row.get("media_8_file_id")),
-                _parse_content_ref(row.get("media_9_chat_id"), row.get("media_9_message_id"), row.get("media_9_file_id")),
-                _parse_content_ref(row.get("media_10_chat_id"), row.get("media_10_message_id"), row.get("media_10_file_id")),
+                _parse_content_ref(
+                    row.get("media_1_chat_id"), row.get("media_1_message_id"),
+                    row.get("media_1_file_id"), row.get("media_1_type"),
+                ),
+                _parse_content_ref(
+                    row.get("media_2_chat_id"), row.get("media_2_message_id"),
+                    row.get("media_2_file_id"), row.get("media_2_type"),
+                ),
+                _parse_content_ref(
+                    row.get("media_3_chat_id"), row.get("media_3_message_id"),
+                    row.get("media_3_file_id"), row.get("media_3_type"),
+                ),
+                _parse_content_ref(
+                    row.get("media_4_chat_id"), row.get("media_4_message_id"),
+                    row.get("media_4_file_id"), row.get("media_4_type"),
+                ),
+                _parse_content_ref(
+                    row.get("media_5_chat_id"), row.get("media_5_message_id"),
+                    row.get("media_5_file_id"), row.get("media_5_type"),
+                ),
+                _parse_content_ref(
+                    row.get("media_6_chat_id"), row.get("media_6_message_id"),
+                    row.get("media_6_file_id"), row.get("media_6_type"),
+                ),
+                _parse_content_ref(
+                    row.get("media_7_chat_id"), row.get("media_7_message_id"),
+                    row.get("media_7_file_id"), row.get("media_7_type"),
+                ),
+                _parse_content_ref(
+                    row.get("media_8_chat_id"), row.get("media_8_message_id"),
+                    row.get("media_8_file_id"), row.get("media_8_type"),
+                ),
+                _parse_content_ref(
+                    row.get("media_9_chat_id"), row.get("media_9_message_id"),
+                    row.get("media_9_file_id"), row.get("media_9_type"),
+                ),
+                _parse_content_ref(
+                    row.get("media_10_chat_id"), row.get("media_10_message_id"),
+                    row.get("media_10_file_id"), row.get("media_10_type"),
+                ),
             ] if r is not None
         ]
 
         if media_group:
             logger.info(
-                "Stage %s: знайдено media_group (%d елементів), file_ids: %s",
+                "Stage %s: знайдено media_group (%d елементів), types/file_ids: %s",
                 row.get("stage_id"),
                 len(media_group),
-                [ref.file_id for ref in media_group],
+                [(ref.media_type.value, ref.file_id) for ref in media_group],
             )
 
         stream.stages.append(Stage(
@@ -161,7 +208,10 @@ def build_cache_from_raw(
             stream_id=stream_id,
             order=_parse_int(row.get("order")),
             title=row.get("title", ""),
-            video_ref=_parse_content_ref(row.get("video_chat_id"), row.get("video_message_id")),
+            video_ref=_parse_content_ref(
+                row.get("video_chat_id"), row.get("video_message_id"),
+                media_type_raw=row.get("video_type"),
+            ),
             notes_text=row.get("notes_text", ""),
             circle_refs=circle_refs,
             media_group=media_group,
@@ -173,7 +223,10 @@ def build_cache_from_raw(
         stream_id = str(row.get("stream_id", "")).strip()
         stream = cache.streams.get(stream_id)
         if stream is None:
-            logger.warning("Plan %r посилається на невідомий stream_id=%r — пропущено", row.get("plan_id"), stream_id)
+            logger.warning(
+                "Plan %r посилається на невідомий stream_id=%r — пропущено",
+                row.get("plan_id"), stream_id,
+            )
             continue
         plan_id = str(row.get("plan_id", "")).strip()
         if not plan_id:
@@ -182,7 +235,9 @@ def build_cache_from_raw(
         try:
             plan_type = PlanType(raw_type)
         except ValueError:
-            logger.warning("Невідомий plan_type=%r для plan_id=%r — пропущено", raw_type, plan_id)
+            logger.warning(
+                "Невідомий plan_type=%r для plan_id=%r — пропущено", raw_type, plan_id
+            )
             continue
         stream.plans[plan_id] = Plan(
             plan_id=plan_id,
@@ -201,7 +256,10 @@ def build_cache_from_raw(
         try:
             status = ParticipantStatus(raw_status)
         except ValueError:
-            logger.warning("Невідомий status=%r для participant_id=%r — встановлено PENDING", raw_status, participant_id)
+            logger.warning(
+                "Невідомий status=%r для participant_id=%r — встановлено PENDING",
+                raw_status, participant_id,
+            )
             status = ParticipantStatus.PENDING
 
         telegram_id_raw = row.get("telegram_id")

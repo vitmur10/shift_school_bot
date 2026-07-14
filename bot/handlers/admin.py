@@ -73,11 +73,12 @@ async def handle_getid(message: Message, admin_ids: set[int]) -> None:
 @router.message(Command("getfileid"))
 async def handle_getfileid(message: Message, admin_ids: set[int]) -> None:
     """
-    Використання: перешліть відео з каналу боту, натисніть Reply
-    і напишіть /getfileid — бот поверне file_id для таблиці.
+    Використання: перешліть медіа з каналу боту, натисніть Reply
+    і напишіть /getfileid — бот поверне file_id та media_type для таблиці.
 
-    file_id зберігається в колонках media_1_file_id / media_2_file_id
-    у вкладці Stages і використовується для send_media_group (справжній album).
+    Підтримувані типи: video, voice, audio, document, photo, video_note.
+    file_id зберігається в колонках media_N_file_id / media_N_type
+    у вкладці Stages.
     """
     if message.from_user.id not in admin_ids:
         await message.answer(ADMIN_ONLY)
@@ -87,21 +88,31 @@ async def handle_getfileid(message: Message, admin_ids: set[int]) -> None:
 
     # debug: логуємо що саме прийшло
     logger.info(
-        "getfileid: target type=%s, has_video=%s, has_doc=%s, has_video_note=%s, forward_origin=%s",
+        "getfileid: target type=%s, has_video=%s, has_voice=%s, has_audio=%s, "
+        "has_doc=%s, has_video_note=%s, has_photo=%s, forward_origin=%s",
         type(target).__name__,
         bool(target.video),
+        bool(target.voice),
+        bool(target.audio),
         bool(target.document),
         bool(target.video_note),
+        bool(target.photo),
         type(target.forward_origin).__name__ if target.forward_origin else None,
     )
 
     # витягуємо file_id залежно від типу медіа
-    file_id = None
-    media_type = None
+    file_id: str | None = None
+    media_type: str | None = None
 
     if target.video:
         file_id = target.video.file_id
         media_type = "video"
+    elif target.voice:
+        file_id = target.voice.file_id
+        media_type = "voice"
+    elif target.audio:
+        file_id = target.audio.file_id
+        media_type = "audio"
     elif target.video_note:
         file_id = target.video_note.file_id
         media_type = "video_note (кружечок)"
@@ -115,15 +126,17 @@ async def handle_getfileid(message: Message, admin_ids: set[int]) -> None:
     if file_id is None:
         await message.answer(
             "Як користуватись:\n"
-            "1. Перешліть відео з каналу боту\n"
-            "2. Натисніть Reply на те переслане відео\n"
+            "1. Перешліть медіафайл (відео, голосове, аудіо тощо) з каналу боту\n"
+            "2. Натисніть Reply на те переслане повідомлення\n"
             "3. Напишіть /getfileid"
         )
         return
 
     await message.answer(
-        f"✅ file_id для таблиці ({media_type}):\n\n"
-        f"{file_id}"
+        f"✅ Дані для таблиці ({media_type}):\n\n"
+        f"`file_id`: `{file_id}`\n\n"
+        f"Колонка `media_N_type`: `{media_type}`",
+        parse_mode="Markdown",
     )
 
 

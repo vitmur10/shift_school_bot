@@ -56,6 +56,8 @@ async def handle_webflow_payment(
     Кладе одразу в кеш (видно наступному /start без очікування
     наступного refresh) + в чергу як append-рядок для Sheets.
     """
+    logger.debug("Отримано webhook-payload від Webflow: %r", payload)
+
     participant = Participant(
         participant_id=str(uuid.uuid4()),
         telegram_id=None,
@@ -72,6 +74,7 @@ async def handle_webflow_payment(
         row_index=-1,  # ще не записаний у Sheets -- реальний row_index з'явиться при наступному refresh
     )
 
+    logger.debug("Створено Participant для кешу: %r", participant)
     cache.upsert_participant(participant)
 
     row_values = [
@@ -80,6 +83,10 @@ async def handle_webflow_payment(
         participant.access_token, participant.token_used, participant.status.value,
         participant.current_stage_order, "", participant.notification_sent,
     ]
+    logger.debug(
+        "row_values для append у Sheets (%s), порядок колонок %s: %r",
+        SHEET_PARTICIPANTS, PARTICIPANTS_COLUMN_ORDER, row_values,
+    )
     await queue.enqueue_append(AppendRow(
         sheet_name=SHEET_PARTICIPANTS,
         row_values=row_values,
