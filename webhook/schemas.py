@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 
 class WebflowFormData(BaseModel):
@@ -49,4 +49,14 @@ class WayForPayCallback(BaseModel):
     merchantSignature: str
     phone: str | None = None
     email: str | None = None
-    productName: list[str] | None = None
+    # WayForPay надсилає товари масивом об'єктів у полі `products`:
+    # [{"name": "...", "price": 1, "count": 1}], а не пласким `productName`.
+    products: list[dict] | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def productName(self) -> list[str]:
+        """Назви товарів з `products` -- саме за ними мапиться stream/plan."""
+        if not self.products:
+            return []
+        return [str(p.get("name", "")) for p in self.products if p.get("name")]
