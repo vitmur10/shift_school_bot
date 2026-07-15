@@ -16,7 +16,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 
 @dataclass
@@ -67,7 +67,11 @@ class WriteQueue:
     пізніше, у flush-циклі.
     """
 
-    def __init__(self, column_index_map: dict[str, dict[str, int]] | None = None) -> None:
+    def __init__(
+        self,
+        column_index_map: dict[str, dict[str, int]] | None = None,
+        row_resolver: Callable[[str], int | None] | None = None,
+    ) -> None:
         """
         column_index_map: {sheet_name: {column_letter: position_in_row_values}}
         Потрібен лише для патчингу pending append-ів (див. _try_patch_pending_append).
@@ -75,11 +79,19 @@ class WriteQueue:
         просто стають окремими (потенційно ризикованими) writes, як і
         раніше; передавання мапи — рекомендована практика для листа
         Participants, див. webhook/handlers.py:PARTICIPANTS_COLUMN_MAP.
+
+        row_resolver: participant_id -> актуальний row_index (або None, якщо
+        рядок ще не відомий). Потрібен, щоб під час drain дорозв'язати
+        row_index для записів, поставлених у чергу ДО того, як cache_refresh
+        проставив реальний номер рядка новоствореному учаснику (див. drain).
+        Без нього такі записи з row_index=-1 ламали б batch_update
+        (діапазон 'Participants'!B-1).
         """
         self._pending_writes: dict[tuple[str, int, str], PendingWrite] = {}
         self._pending_appends: list[AppendRow] = []
         self._lock = asyncio.Lock()
         self._column_index_map = column_index_map or {}
+        self._row_resolver = row_resolver
 
     async def enqueue(self, write: PendingWrite) -> None:
         """
@@ -126,19 +138,48 @@ class WriteQueue:
         async with self._lock:
             self._pending_appends.append(append)
 
+    def _needs_row(self, write: PendingWrite) -> bool:
+        return write.row_index is None or write.row_index < 2
+
     async def drain(self) -> tuple[list[PendingWrite], list[AppendRow]]:
         """
         Атомарно забирає все накопичене і очищає чергу.
         Повертає (точкові_записи, нові_рядки) — саме в такому порядку
         їх і слід застосовувати: спершу апдейти існуючих, потім append-и,
         щоб номери рядків не "поїхали" під час одного flush-циклу.
+
+        Записи з ще невідомим row_index (< 2 — учасника щойно створено
+        через webhook, cache_refresh ще не проставив реальний номер рядка)
+        намагаємось дорозв'язати через row_resolver за participant_id.
+        Якщо рядок усе ще невідомий — ПРИТРИМУЄМО запис у черзі (не віддаємо
+        у flush), щоб не зламати batch_update діапазоном типу 'Participants'!B-1
+        і не заблокувати решту записів. Такий запис поїде наступним циклом,
+        коли cache_refresh проставить row_index.
         """
         async with self._lock:
-            writes = list(self._pending_writes.values())
+            ready: list[PendingWrite] = []
+            held: dict[tuple[str, int, str], PendingWrite] = {}
+            for key, write in self._pending_writes.items():
+                if self._needs_row(write):
+                    resolved = self._resolve_row(write)
+                    if resolved is None or resolved < 2:
+                        held[key] = write
+                        continue
+                    write.row_index = resolved
+                ready.append(write)
+
             appends = list(self._pending_appends)
-            self._pending_writes.clear()
+            self._pending_writes = held
             self._pending_appends.clear()
-            return writes, appends
+            return ready, appends
+
+    def _resolve_row(self, write: PendingWrite) -> int | None:
+        if self._row_resolver is None or not write.participant_id:
+            return None
+        try:
+            return self._row_resolver(write.participant_id)
+        except Exception:
+            return None
 
     async def requeue(self, writes: list[PendingWrite], appends: list[AppendRow]) -> None:
         """

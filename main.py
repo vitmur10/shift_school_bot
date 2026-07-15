@@ -37,7 +37,15 @@ async def main() -> None:
     sheets = SheetsClient(gclient)
 
     cache = CacheStore()
-    queue = WriteQueue(column_index_map={"Participants": PARTICIPANTS_COLUMN_MAP})
+
+    def _resolve_participant_row(participant_id: str) -> int | None:
+        p = cache.get_participant_by_id(participant_id)
+        return p.row_index if p else None
+
+    queue = WriteQueue(
+        column_index_map={"Participants": PARTICIPANTS_COLUMN_MAP},
+        row_resolver=_resolve_participant_row,
+    )
 
     # перше повне завантаження кешу -- синхронно, ДО старту polling,
     # щоб бот не приймав апдейти "наосліп" з порожнім кешем
