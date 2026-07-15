@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import logging
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 
 from storage.cache_store import CacheStore
 from storage.write_queue import WriteQueue
@@ -34,7 +37,12 @@ def build_fastapi_app(cache: CacheStore, queue: WriteQueue) -> FastAPI:
             raw_body.decode("utf-8", errors="replace"),
             exc.errors(),
         )
-        return JSONResponse(status_code=422, content={"detail": exc.errors()})
+        # jsonable_encoder декодує сирі bytes у 'input', інакше JSONResponse
+        # падає з TypeError: Object of type bytes is not JSON serializable.
+        return JSONResponse(
+            status_code=422,
+            content=jsonable_encoder({"detail": exc.errors()}),
+        )
 
     @app.post("/webhook/webflow")
     async def webflow_webhook(submission: WebflowFormSubmission):
@@ -47,16 +55,35 @@ def build_fastapi_app(cache: CacheStore, queue: WriteQueue) -> FastAPI:
         return {"ok": True, "phone": lead.raw_phone}
 
     @app.post("/webhook/wayforpay")
-    async def wayforpay_webhook(callback: WayForPayCallback):
+    async def wayforpay_webhook(request: Request):
         """
         Приймає callback від WayForPay (serviceUrl) після спроби оплати.
         Саме тут -- і лише тут -- створюється Participant і робиться
         реальний запис у Google Sheets, і лише якщо оплата Approved.
 
+        WayForPay шле тіло з Content-Type application/x-www-form-urlencoded
+        (не application/json), тому FastAPI не парсить його автоматично --
+        читаємо сире тіло і валідуємо модель вручну.
+
         ВАЖЛИВО: WayForPay вимагає у відповідь строго визначений JSON
         з підписом (build_wayforpay_accept_response), інакше вважає
         доставку невдалою і буде повторювати callback нескінченно.
         """
+        raw_body = await request.body()
+        payload: dict | None = None
+        try:
+            payload = json.loads(raw_body)
+            callback = WayForPayCallback.model_validate(payload)
+        except (json.JSONDecodeError, ValidationError) as exc:
+            logger.error(
+                "Не вдалося розпарсити callback WayForPay: %s\nRaw body: %s",
+                exc,
+                raw_body.decode("utf-8", errors="replace"),
+            )
+            # Повертаємо 200 з accept, щоб WayForPay не спамив ретраями.
+            order_ref = payload.get("orderReference", "") if isinstance(payload, dict) else ""
+            return build_wayforpay_accept_response(order_ref)
+
         if not verify_wayforpay_signature(callback):
             logger.error(
                 "Відхилено callback WayForPay через невірний підпис: orderReference=%s",
