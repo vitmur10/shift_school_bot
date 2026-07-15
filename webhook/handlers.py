@@ -94,21 +94,42 @@ def _wayforpay_signature(fields: list[str]) -> str:
     ).hexdigest()
 
 
-def verify_wayforpay_signature(callback: WayForPayCallback) -> bool:
+def _sig_value(raw: dict | None, key: str, fallback) -> str:
+    """
+    Значення поля для рядка підпису. Беремо СИРЕ значення з JSON (raw),
+    щоб не зловити коерсію Pydantic (наприклад amount 1 -> 1.0), яка ламає
+    HMAC. Якщо raw немає — падаємо на значення з моделі.
+    """
+    val = raw.get(key) if isinstance(raw, dict) else None
+    if val is None:
+        val = fallback
+    if val is None:
+        return ""
+    return str(val)
+
+
+def verify_wayforpay_signature(
+    callback: WayForPayCallback,
+    raw: dict | None = None,
+) -> bool:
     """
     Перевіряє merchantSignature вхідного callback-у.
     Порядок полів для запиту (serviceUrl) за докою WayForPay:
     merchantAccount;orderReference;amount;currency;authCode;cardPan;transactionStatus;reasonCode
+
+    raw -- оригінальний розпарсений JSON. Підпис рахуємо саме з нього, бо
+    Pydantic приводить типи (amount 1 -> 1.0), а WayForPay підписував рядок
+    з початковим форматом числа.
     """
     expected = _wayforpay_signature([
-        callback.merchantAccount,
-        callback.orderReference,
-        callback.amount,
-        callback.currency,
-        callback.authCode or "",
-        callback.cardPan or "",
-        callback.transactionStatus,
-        callback.reasonCode if callback.reasonCode is not None else "",
+        _sig_value(raw, "merchantAccount", callback.merchantAccount),
+        _sig_value(raw, "orderReference", callback.orderReference),
+        _sig_value(raw, "amount", callback.amount),
+        _sig_value(raw, "currency", callback.currency),
+        _sig_value(raw, "authCode", callback.authCode or ""),
+        _sig_value(raw, "cardPan", callback.cardPan or ""),
+        _sig_value(raw, "transactionStatus", callback.transactionStatus),
+        _sig_value(raw, "reasonCode", callback.reasonCode if callback.reasonCode is not None else ""),
     ])
     is_valid = hmac.compare_digest(expected, callback.merchantSignature)
     if not is_valid:

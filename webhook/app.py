@@ -84,7 +84,7 @@ def build_fastapi_app(cache: CacheStore, queue: WriteQueue) -> FastAPI:
             order_ref = payload.get("orderReference", "") if isinstance(payload, dict) else ""
             return build_wayforpay_accept_response(order_ref)
 
-        if not verify_wayforpay_signature(callback):
+        if not verify_wayforpay_signature(callback, raw=payload):
             logger.error(
                 "Відхилено callback WayForPay через невірний підпис: orderReference=%s",
                 callback.orderReference,
