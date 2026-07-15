@@ -197,6 +197,16 @@ class WriteQueue:
                 self._pending_writes.setdefault(write.dedup_key, write)
             self._pending_appends.extend(appends)
 
+    async def snapshot(self) -> tuple[list[PendingWrite], list[AppendRow]]:
+        """
+        Копія поточного вмісту черги БЕЗ очищення (на відміну від drain).
+        Потрібна cache_refresh, щоб накласти ще не злиті в Sheets зміни
+        поверх свіжозчитаного кешу — інакше refresh затирає стан, який
+        існує лише в пам'яті/черзі (напр. щойно прив'язаний telegram_id).
+        """
+        async with self._lock:
+            return list(self._pending_writes.values()), list(self._pending_appends)
+
     def pending_count(self) -> int:
         """Для діагностики/admin-команди — скільки записів очікує на flush."""
         return len(self._pending_writes) + len(self._pending_appends)

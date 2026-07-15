@@ -22,7 +22,7 @@ from services.notifications import SendsMessages, notify_scheduled_access_opened
 
 logger = logging.getLogger(__name__)
 
-COL_NOTIFICATION_SENT = "N"
+COL_NOTIFICATION_SENT = "O"  # у листі Participants: L joined_at, M activated_at, N last_progress_at, O notification_sent
 
 
 def _find_unsent_notifications(cache: CacheStore):

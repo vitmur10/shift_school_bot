@@ -50,7 +50,7 @@ async def main() -> None:
     # перше повне завантаження кешу -- синхронно, ДО старту polling,
     # щоб бот не приймав апдейти "наосліп" з порожнім кешем
     logger.info("Перше завантаження кешу...")
-    await refresh_cache_once(cache, sheets)
+    await refresh_cache_once(cache, sheets, queue)
 
     dp = build_dispatcher(cache, queue, sheets, settings.admin_ids_set)
     app = build_fastapi_app(cache, queue)
@@ -61,7 +61,7 @@ async def main() -> None:
     await asyncio.gather(
         dp.start_polling(bot),
         server.serve(),
-        cache_refresh_loop(cache, sheets, settings.CACHE_REFRESH_SEC),
+        cache_refresh_loop(cache, sheets, settings.CACHE_REFRESH_SEC, queue),
         write_flush_loop(queue, sheets, settings.WRITE_FLUSH_SEC),
         scheduled_activation_loop(cache, queue, bot, settings.SCHEDULED_CHECK_SEC),
     )

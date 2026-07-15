@@ -28,6 +28,8 @@ from storage.models import (
     Stream,
 )
 from storage.sheets_client import SheetsClient
+from storage.write_queue import AppendRow, PendingWrite, WriteQueue
+from webhook.handlers import PARTICIPANTS_COLUMN_ORDER
 
 logger = logging.getLogger(__name__)
 
@@ -249,47 +251,119 @@ def build_cache_from_raw(
         )
 
     for i, row in enumerate(participants_rows):
-        participant_id = str(row.get("participant_id", "")).strip()
-        if not participant_id:
-            continue
-        raw_status = str(row.get("status", "")).strip().lower()
-        try:
-            status = ParticipantStatus(raw_status)
-        except ValueError:
-            logger.warning(
-                "Невідомий status=%r для participant_id=%r — встановлено PENDING",
-                raw_status, participant_id,
-            )
-            status = ParticipantStatus.PENDING
-
-        telegram_id_raw = row.get("telegram_id")
-        telegram_id = _parse_int(telegram_id_raw) if telegram_id_raw not in (None, "") else None
-
-        participant = Participant(
-            participant_id=participant_id,
-            telegram_id=telegram_id,
-            telegram_username=(row.get("telegram_username") or None),
-            phone_number=(row.get("phone_number") or None),
-            stream_id=str(row.get("stream_id", "")).strip(),
-            plan_id=str(row.get("plan_id", "")).strip(),
-            access_token=row.get("access_token", ""),
-            token_used=_parse_bool(row.get("token_used", False)),
-            status=status,
-            current_stage_order=_parse_int(row.get("current_stage_order")),
-            fsm_state=(row.get("fsm_state") or None),
-            notification_sent=_parse_bool(row.get("notification_sent", False)),
-            row_index=i + 2,  # рядок 1 — заголовок, дані з рядка 2
-            joined_at=_parse_datetime(row.get("joined_at")),
-            activated_at=_parse_datetime(row.get("activated_at")),
-            last_progress_at=_parse_datetime(row.get("last_progress_at")),
-        )
-        cache.upsert_participant(participant)
+        participant = _participant_from_record(row, row_index=i + 2)
+        if participant is not None:
+            cache.upsert_participant(participant)
 
     cache.last_synced_at = datetime.now(timezone.utc)
     return cache
 
 
-async def refresh_cache_once(cache: CacheStore, sheets: SheetsClient) -> None:
+def _participant_from_record(row: dict, row_index: int) -> Participant | None:
+    """Будує Participant з dict-рядка (за назвами колонок). None, якщо немає participant_id."""
+    participant_id = str(row.get("participant_id", "")).strip()
+    if not participant_id:
+        return None
+
+    raw_status = str(row.get("status", "")).strip().lower()
+    try:
+        status = ParticipantStatus(raw_status)
+    except ValueError:
+        logger.warning(
+            "Невідомий status=%r для participant_id=%r — встановлено PENDING",
+            raw_status, participant_id,
+        )
+        status = ParticipantStatus.PENDING
+
+    telegram_id_raw = row.get("telegram_id")
+    telegram_id = _parse_int(telegram_id_raw) if telegram_id_raw not in (None, "") else None
+
+    return Participant(
+        participant_id=participant_id,
+        telegram_id=telegram_id,
+        telegram_username=(row.get("telegram_username") or None),
+        phone_number=(row.get("phone_number") or None),
+        stream_id=str(row.get("stream_id", "")).strip(),
+        plan_id=str(row.get("plan_id", "")).strip(),
+        access_token=row.get("access_token", ""),
+        token_used=_parse_bool(row.get("token_used", False)),
+        status=status,
+        current_stage_order=_parse_int(row.get("current_stage_order")),
+        fsm_state=(row.get("fsm_state") or None),
+        notification_sent=_parse_bool(row.get("notification_sent", False)),
+        row_index=row_index,
+        joined_at=_parse_datetime(row.get("joined_at")),
+        activated_at=_parse_datetime(row.get("activated_at")),
+        last_progress_at=_parse_datetime(row.get("last_progress_at")),
+    )
+
+
+def _parse_status(value) -> ParticipantStatus:
+    try:
+        return ParticipantStatus(str(value).strip().lower())
+    except ValueError:
+        return ParticipantStatus.PENDING
+
+
+# Колонка листа Participants -> (атрибут Participant, конвертер значення).
+# Використовується для накладання ще не злитих у Sheets точкових записів
+# поверх свіжозчитаного кешу (див. _overlay_pending).
+_WRITE_COLUMN_TO_FIELD = {
+    "B": ("telegram_id", lambda v: _parse_int(v) if v not in (None, "") else None),
+    "C": ("telegram_username", lambda v: (str(v) or None) if v else None),
+    "H": ("token_used", _parse_bool),
+    "I": ("status", _parse_status),
+    "J": ("current_stage_order", _parse_int),
+    "K": ("fsm_state", lambda v: (str(v) or None) if v else None),
+    "L": ("joined_at", _parse_datetime),
+    "M": ("activated_at", _parse_datetime),
+    "N": ("last_progress_at", _parse_datetime),
+    "O": ("notification_sent", _parse_bool),
+}
+
+
+def _overlay_pending(
+    new_cache: CacheStore,
+    writes: list[PendingWrite],
+    appends: list[AppendRow],
+) -> None:
+    """
+    Накладає ще не злиті в Sheets зміни з черги поверх свіжозчитаного кешу.
+
+    Без цього повне перезавантаження кешу затирало б стан, який поки що
+    існує лише в пам'яті (напр. telegram_id, щойно прив'язаний через /start,
+    але ще не flush-нутий у таблицю) — і бот на короткий час "губив" учасника.
+
+    Спершу — appends (нові учасники, яких ще нема в Sheets), потім — точкові
+    writes (новіші оновлення полів), щоб порядок відповідав flush-циклу.
+    """
+    for a in appends:
+        if a.sheet_name != "Participants":
+            continue
+        row = dict(zip(PARTICIPANTS_COLUMN_ORDER, a.row_values))
+        participant = _participant_from_record(row, row_index=-1)
+        if participant is not None:
+            new_cache.upsert_participant(participant)
+
+    for w in writes:
+        if w.sheet_name != "Participants" or not w.participant_id:
+            continue
+        field = _WRITE_COLUMN_TO_FIELD.get(w.column)
+        if field is None:
+            continue
+        participant = new_cache.get_participant_by_id(w.participant_id)
+        if participant is None:
+            continue
+        attr, convert = field
+        setattr(participant, attr, convert(w.value))
+        new_cache.upsert_participant(participant)  # переіндексувати tg_id/username/token
+
+
+async def refresh_cache_once(
+    cache: CacheStore,
+    sheets: SheetsClient,
+    queue: WriteQueue | None = None,
+) -> None:
     """Один прохід оновлення: читає всі 4 листи й атомарно підміняє кеш."""
     streams_rows, stages_rows, plans_rows, participants_rows = await asyncio.gather(
         asyncio.to_thread(sheets.read_streams),
@@ -299,6 +373,13 @@ async def refresh_cache_once(cache: CacheStore, sheets: SheetsClient) -> None:
     )
 
     new_cache = build_cache_from_raw(streams_rows, stages_rows, plans_rows, participants_rows)
+
+    # накласти ще не злиті в Sheets зміни з черги, щоб не втратити стан,
+    # який поки існує лише в пам'яті (напр. свіжий /start до flush).
+    if queue is not None:
+        writes, appends = await queue.snapshot()
+        _overlay_pending(new_cache, writes, appends)
+
     cache.replace_with(new_cache)
 
     logger.info(
@@ -307,7 +388,12 @@ async def refresh_cache_once(cache: CacheStore, sheets: SheetsClient) -> None:
     )
 
 
-async def cache_refresh_loop(cache: CacheStore, sheets: SheetsClient, interval_sec: int) -> None:
+async def cache_refresh_loop(
+    cache: CacheStore,
+    sheets: SheetsClient,
+    interval_sec: int,
+    queue: WriteQueue | None = None,
+) -> None:
     """
     Нескінченний цикл оновлення кешу. Перший прохід відбувається одразу
     при старті (до старту polling — див. main.py), далі — кожні interval_sec.
@@ -318,7 +404,7 @@ async def cache_refresh_loop(cache: CacheStore, sheets: SheetsClient, interval_s
     """
     while True:
         try:
-            await refresh_cache_once(cache, sheets)
+            await refresh_cache_once(cache, sheets, queue)
         except Exception:
             logger.exception("Помилка під час оновлення кешу — лишаємо попередній стан кешу")
         await asyncio.sleep(interval_sec)

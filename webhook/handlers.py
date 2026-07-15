@@ -19,11 +19,12 @@ logger = logging.getLogger(__name__)
 
 SHEET_PARTICIPANTS = "Participants"
 
-# порядок МАЄ збігатись з порядком колонок у листі Participants
+# порядок МАЄ збігатись з порядком колонок у листі Participants (A..O)
 PARTICIPANTS_COLUMN_ORDER = [
     "participant_id", "telegram_id", "telegram_username", "phone_number",
     "stream_id", "plan_id", "access_token", "token_used", "status",
-    "current_stage_order", "fsm_state", "notification_sent",
+    "current_stage_order", "fsm_state",
+    "joined_at", "activated_at", "last_progress_at", "notification_sent",
 ]
 
 # буква колонки Sheets -> позиція в PARTICIPANTS_COLUMN_ORDER / row_values.
@@ -42,7 +43,10 @@ PARTICIPANTS_COLUMN_MAP = {
     "I": 8,  # status
     "J": 9,  # current_stage_order
     "K": 10,  # fsm_state
-    "N": 11,  # notification_sent (буква N навмисно — узгоджено з jobs/scheduled_activation.py COL_NOTIFICATION_SENT)
+    "L": 11,  # joined_at
+    "M": 12,  # activated_at
+    "N": 13,  # last_progress_at
+    "O": 14,  # notification_sent (узгоджено з jobs/scheduled_activation.py COL_NOTIFICATION_SENT)
 }
 
 
@@ -257,10 +261,21 @@ async def handle_wayforpay_payment(
     cache.upsert_participant(participant)
 
     row_values = [
-        participant.participant_id, "", participant.telegram_username or "",
-        participant.phone_number, participant.stream_id, participant.plan_id,
-        participant.access_token, participant.token_used, participant.status.value,
-        participant.current_stage_order, "", participant.notification_sent,
+        participant.participant_id,            # A participant_id
+        "",                                    # B telegram_id (проставиться при /start)
+        participant.telegram_username or "",   # C telegram_username
+        participant.phone_number,              # D phone_number
+        participant.stream_id,                 # E stream_id
+        participant.plan_id,                   # F plan_id
+        participant.access_token,              # G access_token
+        participant.token_used,                # H token_used
+        participant.status.value,              # I status
+        participant.current_stage_order,       # J current_stage_order
+        "",                                    # K fsm_state
+        "",                                    # L joined_at
+        "",                                    # M activated_at
+        "",                                    # N last_progress_at
+        participant.notification_sent,         # O notification_sent
     ]
     logger.debug(
         "row_values для append у Sheets (%s), порядок колонок %s: %r",
