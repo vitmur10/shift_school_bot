@@ -45,6 +45,7 @@ class SheetsClient:
     SHEET_PLANS = "Plans"
     SHEET_PARTICIPANTS = "Participants"
     SHEET_LEADS = "Leads"
+    SHEET_BROADCASTS = "Broadcasts"
     SHEET_AUDIT_LOG = "AuditLog"
 
     def __init__(self, gclient: Any) -> None:
@@ -92,6 +93,49 @@ class SheetsClient:
                 self.SHEET_LEADS, e,
             )
             return None
+
+    def read_broadcasts(self) -> list[dict[str, Any]] | None:
+        """
+        Читає лист Broadcasts. Повертає None, якщо листа немає (розсилки
+        вимкнено) — це не повинно валити роботу бота. Self-heal: як лист
+        з'явиться, наступний цикл почне його читати.
+        """
+        try:
+            return self.read_all_records(self.SHEET_BROADCASTS)
+        except Exception as e:
+            logger.warning(
+                "Лист %s недоступний (%s) — ручні розсилки вимкнено до появи листа",
+                self.SHEET_BROADCASTS, e,
+            )
+            return None
+
+    def set_broadcast_status(self, row_index: int, status: str) -> None:
+        """Швидко проставляє лише статус (E) — щоб «застовпити» рядок у роботу."""
+        self._worksheet(self.SHEET_BROADCASTS).batch_update([
+            {"range": f"E{row_index}", "values": [[status]]},
+        ])
+
+    def update_broadcast_status(
+        self,
+        row_index: int,
+        status: str,
+        sent_at: str,
+        sent_count: int,
+        note: str = "",
+    ) -> None:
+        """
+        Прямо (синхронно) проставляє результат розсилки в рядок Broadcasts:
+        E status, F sent_at, G sent_count, H note. Пряме оновлення (а не через
+        WriteQueue) — щоб статус зафіксувався НЕГАЙНО і той самий рядок не
+        розіслався повторно навіть при рестарті між циклами.
+        """
+        worksheet = self._worksheet(self.SHEET_BROADCASTS)
+        worksheet.batch_update([
+            {"range": f"E{row_index}", "values": [[status]]},
+            {"range": f"F{row_index}", "values": [[sent_at]]},
+            {"range": f"G{row_index}", "values": [[sent_count]]},
+            {"range": f"H{row_index}", "values": [[note]]},
+        ])
 
     # ---- запис (застосування накопиченої черги, синхронно) ----
 

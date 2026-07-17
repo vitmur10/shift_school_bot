@@ -24,6 +24,7 @@ from bot.texts import ADMIN_CACHE_REFRESHED, ADMIN_ONLY
 from jobs.cache_refresh import refresh_cache_once
 from storage.cache_store import CacheStore
 from storage.sheets_client import SheetsClient
+from storage.write_queue import WriteQueue
 
 logger = logging.getLogger(__name__)
 
@@ -141,11 +142,17 @@ async def handle_getfileid(message: Message, admin_ids: set[int]) -> None:
 
 
 @router.message(Command("refresh"))
-async def handle_refresh(message: Message, cache: CacheStore, sheets: SheetsClient, admin_ids: set[int]) -> None:
+async def handle_refresh(
+    message: Message,
+    cache: CacheStore,
+    sheets: SheetsClient,
+    queue: WriteQueue,
+    admin_ids: set[int],
+) -> None:
     if message.from_user.id not in admin_ids:
         await message.answer(ADMIN_ONLY)
         return
 
-    await refresh_cache_once(cache, sheets)
+    await refresh_cache_once(cache, sheets, queue)
     await message.answer(ADMIN_CACHE_REFRESHED)
     logger.info("Кеш примусово оновлено адміном tg_id=%s", message.from_user.id)

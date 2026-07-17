@@ -15,6 +15,7 @@ from aiogram import Bot
 
 from bot.dispatcher import build_dispatcher
 from config import settings
+from jobs.broadcast import broadcast_loop
 from jobs.cache_refresh import cache_refresh_loop, refresh_cache_once
 from jobs.scheduled_activation import scheduled_activation_loop
 from jobs.write_flush import write_flush_loop
@@ -64,6 +65,7 @@ async def main() -> None:
         cache_refresh_loop(cache, sheets, settings.CACHE_REFRESH_SEC, queue),
         write_flush_loop(queue, sheets, settings.WRITE_FLUSH_SEC),
         scheduled_activation_loop(cache, queue, bot, settings.SCHEDULED_CHECK_SEC),
+        broadcast_loop(cache, sheets, bot, settings.BROADCAST_CHECK_SEC),
     )
 
 

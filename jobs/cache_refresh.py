@@ -323,6 +323,7 @@ def _participant_from_record(row: dict, row_index: int) -> Participant | None:
         joined_at=_parse_datetime(row.get("joined_at")),
         activated_at=_parse_datetime(row.get("activated_at")),
         last_progress_at=_parse_datetime(row.get("last_progress_at")),
+        reminders_sent=str(row.get("reminders_sent") or "").strip(),
     )
 
 
@@ -347,6 +348,7 @@ _WRITE_COLUMN_TO_FIELD = {
     "M": ("activated_at", _parse_datetime),
     "N": ("last_progress_at", _parse_datetime),
     "O": ("notification_sent", _parse_bool),
+    "P": ("reminders_sent", lambda v: str(v or "").strip()),
 }
 
 

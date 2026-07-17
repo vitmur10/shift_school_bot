@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     CACHE_REFRESH_SEC: int = 180
     WRITE_FLUSH_SEC: int = 20
     SCHEDULED_CHECK_SEC: int = 60
+    BROADCAST_CHECK_SEC: int = 60
     ADMIN_IDS: str = ""  # comma-separated tg_id, напр. "111,222"
 
     # ---- WayForPay ----
