@@ -77,6 +77,9 @@ class Stage:
     media_group: list[ContentRef] = field(default_factory=list)  # кілька медіа одним повідомленням
     unlock_button_text: str = "Далі"
     is_active: bool = True
+    # TRUE = етап лише для тарифів зі стартом за датою (scheduled);
+    # для instant-тарифів (доступ одразу) такий етап пропускається.
+    only_scheduled: bool = False
 
     def active_circle_refs(self) -> list[ContentRef]:
         """Повертає лише заповнені посилання на кружечки."""

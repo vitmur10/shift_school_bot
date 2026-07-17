@@ -222,6 +222,7 @@ def build_cache_from_raw(
             media_group=media_group,
             unlock_button_text=row.get("unlock_button_text") or "Далі",
             is_active=_parse_bool(row.get("is_active", True)),
+            only_scheduled=_parse_bool(row.get("only_scheduled", False)),
         ))
 
     for row in plans_rows:

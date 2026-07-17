@@ -88,12 +88,32 @@ def get_current_stage(cache: CacheStore, participant: Participant) -> Stage | No
 
 
 def get_next_stage(cache: CacheStore, participant: Participant) -> Stage | None:
-    """Повертає НАСТУПНИЙ етап (для попереднього показу перед видачею) або None, якщо курс завершено."""
+    """
+    Повертає НАСТУПНИЙ доступний етап (за current_stage_order) або None,
+    якщо курс завершено.
+
+    Для instant-тарифів (доступ одразу) пропускаємо етапи, позначені
+    only_scheduled=TRUE (напр. привітання «стартуємо о 18:00», запрошення
+    до групи, «за 30 хвилин») — вони мають сенс лише для спільного старту
+    за датою. Для scheduled-тарифів показуємо всі етапи.
+    """
     stream = cache.get_stream(participant.stream_id)
     if stream is None:
         return None
-    next_order = participant.current_stage_order + 1
-    return stream.get_stage(next_order)
+
+    plan = stream.get_plan(participant.plan_id)
+    is_instant = plan is not None and plan.plan_type == PlanType.INSTANT
+
+    candidates = sorted(
+        (s for s in stream.stages
+         if s.is_active and s.order > participant.current_stage_order),
+        key=lambda s: s.order,
+    )
+    for stage in candidates:
+        if is_instant and stage.only_scheduled:
+            continue  # пропускаємо «пре-стартові» етапи для instant-тарифу
+        return stage
+    return None
 
 
 async def advance_to_next_stage(

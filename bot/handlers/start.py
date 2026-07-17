@@ -39,7 +39,7 @@ from bot.texts import (
     format_stage_message,
     not_yet_scheduled_text,
 )
-from services.access_control import AccessDecision, check_course_access, get_current_stage
+from services.access_control import AccessDecision, check_course_access, get_current_stage, get_next_stage
 from services.identification import identify_by_phone, identify_participant
 from services.token_service import (
     TokenAlreadyUsedError,
@@ -187,8 +187,7 @@ async def _show_access_state(
     # учасник уже десь усередині курсу (повторний /start) -- показуємо,
     # на якому етапі він зараз зупинився, без повторної видачі контенту
     # (повторна видача контенту, якщо потрібна, — окрема дія в stages.py)
-    stream = cache.get_stream(participant.stream_id)
-    is_last = participant.current_stage_order >= stream.total_active_stages()
+    is_last = get_next_stage(cache, participant) is None
     text = format_stage_message(current_stage)
     if is_last:
         await message.answer(text)

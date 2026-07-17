@@ -29,7 +29,7 @@ from bot.texts import (
     format_stage_message,
     not_yet_scheduled_text,
 )
-from services.access_control import AccessDecision, advance_to_next_stage
+from services.access_control import AccessDecision, advance_to_next_stage, get_next_stage
 from services.content_delivery import CopiesMessages, deliver_full_stage, TELEGRAM_CAPTION_LIMIT
 from storage.cache_store import CacheStore
 from storage.write_queue import WriteQueue
@@ -103,8 +103,9 @@ async def handle_next_stage(
         or (stage.video_ref is not None and stage.video_ref.is_set())
     )
 
-    stream = cache.get_stream(participant.stream_id)
-    is_last = participant.current_stage_order >= stream.total_active_stages()
+    # is_last: чи є ще доступний етап ПІСЛЯ поточного (з урахуванням пропуску
+    # only_scheduled-етапів для instant-тарифу) — тому через get_next_stage
+    is_last = get_next_stage(cache, participant) is None
     next_btn = None if is_last else next_stage_keyboard(stage.unlock_button_text)
 
     logger.info(

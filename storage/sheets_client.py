@@ -60,9 +60,30 @@ class SheetsClient:
         """
         Повертає список словників (заголовок -> значення) для кожного рядка.
         Викликається з jobs/cache_refresh.py через asyncio.to_thread.
+
+        Читаємо через get_all_values і будуємо словники самі (а не
+        get_all_records), щоб бути стійкими до:
+          - порожніх/дубльованих заголовків (get_all_records на них падає
+            з GSpreadException 'header contains duplicates');
+          - типів: усі значення повертаються рядками, тож числові телефони
+            не «зрізають» ведучий 0 і не ламають парсинг.
+        Порожні колонки-заголовки просто ігноруються.
         """
         logger.debug("Читання всіх записів з листа %s", sheet_name)
-        records = self._worksheet(sheet_name).get_all_records()
+        values = self._worksheet(sheet_name).get_all_values()
+        if not values:
+            return []
+
+        header = [str(h).strip() for h in values[0]]
+        records: list[dict[str, Any]] = []
+        for raw_row in values[1:]:
+            record: dict[str, Any] = {}
+            for i, key in enumerate(header):
+                if not key:
+                    continue  # порожній заголовок (порожня колонка) — пропускаємо
+                record[key] = raw_row[i] if i < len(raw_row) else ""
+            records.append(record)
+
         logger.debug("Отримано %d рядків з листа %s", len(records), sheet_name)
         return records
 
@@ -194,7 +215,13 @@ class SheetsClient:
                 "append_rows у лист %s: %d рядків -> %r",
                 sheet_name, len(rows), rows,
             )
-            worksheet.append_rows(rows, value_input_option="USER_ENTERED")
+            # table_range="A1" ОБОВ'ЯЗКОВИЙ: без нього gspread сам «вгадує»
+            # місце вставки і може записати рядок зі зсувом праворуч (якщо в
+            # заголовку є порожні хвостові колонки) — дані потрапляють не в ті
+            # колонки. З "A1" вставка завжди вирівнюється по колонці A.
+            worksheet.append_rows(
+                rows, value_input_option="USER_ENTERED", table_range="A1",
+            )
 
     def apply_queue_snapshot(self, writes: list[PendingWrite], appends: list[AppendRow]) -> None:
         """Зручний агрегат: застосувати і точкові записи, і нові рядки за один виклик."""

@@ -54,8 +54,10 @@ BROADCASTS_COLUMN_ORDER = [
 
 STREAMS_NEW_COLUMNS = ["telegram_group_url"]
 PLANS_NEW_COLUMNS = ["curator_url"]
+STAGES_NEW_COLUMNS = ["only_scheduled"]
 
 SHEET_STREAMS = "Streams"
+SHEET_STAGES = "Stages"
 SHEET_PLANS = "Plans"
 SHEET_PARTICIPANTS = "Participants"
 SHEET_LEADS = "Leads"
@@ -212,6 +214,7 @@ def main() -> None:
     print("Готово. Застосовую міграцію:\n")
 
     ensure_columns(ss, SHEET_STREAMS, STREAMS_NEW_COLUMNS)
+    ensure_columns(ss, SHEET_STAGES, STAGES_NEW_COLUMNS)
     ensure_columns(ss, SHEET_PLANS, PLANS_NEW_COLUMNS)
     ensure_columns(ss, SHEET_PARTICIPANTS, PARTICIPANTS_NEW_COLUMNS)
     ensure_sheet_with_headers(ss, SHEET_LEADS, LEADS_COLUMN_ORDER)
