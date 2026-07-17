@@ -16,7 +16,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 
-from storage.cache_store import CacheStore
+from storage.cache_store import CacheStore, LeadRow, normalize_phone
 from storage.models import (
     ContentRef,
     MediaType,
@@ -29,7 +29,15 @@ from storage.models import (
 )
 from storage.sheets_client import SheetsClient
 from storage.write_queue import AppendRow, PendingWrite, WriteQueue
-from webhook.handlers import PARTICIPANTS_COLUMN_ORDER
+from webhook.handlers import (
+    LEAD_STATUS_PAID,
+    LEADS_COL_PAID_AT,
+    LEADS_COL_PLAN,
+    LEADS_COL_STATUS,
+    LEADS_COL_STREAM,
+    PARTICIPANTS_COLUMN_ORDER,
+    SHEET_LEADS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +117,7 @@ def build_cache_from_raw(
     stages_rows: list[dict],
     plans_rows: list[dict],
     participants_rows: list[dict],
+    leads_rows: list[dict] | None = None,
 ) -> CacheStore:
     """
     Чиста функція: сирі рядки (як їх повертає gspread get_all_records)
@@ -133,6 +142,8 @@ def build_cache_from_raw(
             stream_id=stream_id,
             title=row.get("title", ""),
             is_active=_parse_bool(row.get("is_active", True)),
+            telegram_group_url=(str(row.get("telegram_group_url")).strip() or None)
+            if row.get("telegram_group_url") else None,
         )
 
     for row in sorted(stages_rows, key=lambda r: _parse_int(r.get("order"))):
@@ -248,12 +259,29 @@ def build_cache_from_raw(
             title=row.get("title", ""),
             start_date=_parse_datetime(row.get("start_date")),
             is_active=_parse_bool(row.get("is_active", True)),
+            curator_url=(str(row.get("curator_url")).strip() or None)
+            if row.get("curator_url") else None,
         )
 
     for i, row in enumerate(participants_rows):
         participant = _participant_from_record(row, row_index=i + 2)
         if participant is not None:
             cache.upsert_participant(participant)
+
+    # лист Leads опціональний: None -> облік вимкнено (листа немає)
+    if leads_rows is not None:
+        cache.leads_enabled = True
+        for i, row in enumerate(leads_rows):
+            raw_phone = str(row.get("phone_number", "")).strip()
+            if not raw_phone:
+                continue
+            phone = normalize_phone(raw_phone)
+            cache.leads_by_phone[phone] = LeadRow(
+                phone=phone,
+                status=str(row.get("status", "")).strip(),
+                row_index=i + 2,  # рядок 1 — заголовок
+                raw_phone=raw_phone,
+            )
 
     cache.last_synced_at = datetime.now(timezone.utc)
     return cache
@@ -364,28 +392,80 @@ async def refresh_cache_once(
     sheets: SheetsClient,
     queue: WriteQueue | None = None,
 ) -> None:
-    """Один прохід оновлення: читає всі 4 листи й атомарно підміняє кеш."""
-    streams_rows, stages_rows, plans_rows, participants_rows = await asyncio.gather(
+    """Один прохід оновлення: читає листи й атомарно підміняє кеш."""
+    streams_rows, stages_rows, plans_rows, participants_rows, leads_rows = await asyncio.gather(
         asyncio.to_thread(sheets.read_streams),
         asyncio.to_thread(sheets.read_stages),
         asyncio.to_thread(sheets.read_plans),
         asyncio.to_thread(sheets.read_participants),
+        asyncio.to_thread(sheets.read_leads),
     )
 
-    new_cache = build_cache_from_raw(streams_rows, stages_rows, plans_rows, participants_rows)
+    new_cache = build_cache_from_raw(
+        streams_rows, stages_rows, plans_rows, participants_rows, leads_rows,
+    )
 
     # накласти ще не злиті в Sheets зміни з черги, щоб не втратити стан,
     # який поки існує лише в пам'яті (напр. свіжий /start до flush).
     if queue is not None:
         writes, appends = await queue.snapshot()
         _overlay_pending(new_cache, writes, appends)
+        # позначити у листі Leads тих, хто вже оплатив (телефон збігається
+        # з оплаченим учасником) — статус «оплатив» + дата/потік/тариф
+        await _reconcile_paid_leads(new_cache, queue)
 
     cache.replace_with(new_cache)
 
     logger.info(
-        "Кеш оновлено: %d потоків, %d учасників",
+        "Кеш оновлено: %d потоків, %d учасників%s",
         len(cache.streams), len(cache.participants_by_id),
+        f", {len(cache.leads_by_phone)} лідів" if cache.leads_enabled else "",
     )
+
+
+async def _reconcile_paid_leads(new_cache: CacheStore, queue: WriteQueue) -> None:
+    """
+    Для кожного ліда у листі Leads, чий телефон збігається з оплаченим
+    учасником, ставить статус «оплатив» (+ дата/потік/тариф). Ідемпотентно:
+    якщо статус уже «оплатив» — пропускаємо; дедуплікація черги не дасть
+    накопичити повторні записи між flush-ами.
+    """
+    if not new_cache.leads_enabled or not new_cache.leads_by_phone:
+        return
+
+    # телефон -> учасник (оплачені = ті, хто взагалі є у Participants)
+    paid_by_phone: dict[str, "object"] = {}
+    for p in new_cache.all_participants():
+        if p.phone_number:
+            paid_by_phone[normalize_phone(p.phone_number)] = p
+
+    for lead in new_cache.leads_by_phone.values():
+        if lead.status.strip().lower() == LEAD_STATUS_PAID.lower():
+            continue
+        participant = paid_by_phone.get(lead.phone)
+        if participant is None or lead.row_index < 2:
+            continue
+        pid = participant.participant_id
+        await queue.enqueue(PendingWrite(
+            sheet_name=SHEET_LEADS, row_index=lead.row_index,
+            column=LEADS_COL_STATUS, value=LEAD_STATUS_PAID, participant_id=pid,
+        ))
+        await queue.enqueue(PendingWrite(
+            sheet_name=SHEET_LEADS, row_index=lead.row_index,
+            column=LEADS_COL_PAID_AT, value=_now_iso_sheets(), participant_id=pid,
+        ))
+        await queue.enqueue(PendingWrite(
+            sheet_name=SHEET_LEADS, row_index=lead.row_index,
+            column=LEADS_COL_STREAM, value=participant.stream_id, participant_id=pid,
+        ))
+        await queue.enqueue(PendingWrite(
+            sheet_name=SHEET_LEADS, row_index=lead.row_index,
+            column=LEADS_COL_PLAN, value=participant.plan_id, participant_id=pid,
+        ))
+
+
+def _now_iso_sheets() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 
 async def cache_refresh_loop(

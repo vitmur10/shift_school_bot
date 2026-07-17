@@ -12,7 +12,7 @@ Bot тут — Protocol, а не aiogram.Bot напряму, щоб services/ н
 from __future__ import annotations
 
 import logging
-from typing import Protocol
+from typing import Any, Protocol
 
 from storage.models import Participant
 
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 class SendsMessages(Protocol):
-    async def send_message(self, chat_id: int, text: str) -> None: ...
+    async def send_message(self, chat_id: int, text: str, reply_markup: Any = None) -> None: ...
 
 
 DEFAULT_SCHEDULED_START_TEXT = (
@@ -33,6 +33,7 @@ async def notify_scheduled_access_opened(
     bot: SendsMessages,
     participant: Participant,
     text: str = DEFAULT_SCHEDULED_START_TEXT,
+    reply_markup: Any = None,
 ) -> bool:
     """
     Надсилає повідомлення про відкриття доступу. Повертає True/False —
@@ -51,7 +52,7 @@ async def notify_scheduled_access_opened(
         return False
 
     try:
-        await bot.send_message(chat_id=participant.telegram_id, text=text)
+        await bot.send_message(chat_id=participant.telegram_id, text=text, reply_markup=reply_markup)
         return True
     except Exception:
         logger.exception(

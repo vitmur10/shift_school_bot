@@ -44,6 +44,7 @@ class SheetsClient:
     SHEET_STAGES = "Stages"
     SHEET_PLANS = "Plans"
     SHEET_PARTICIPANTS = "Participants"
+    SHEET_LEADS = "Leads"
     SHEET_AUDIT_LOG = "AuditLog"
 
     def __init__(self, gclient: Any) -> None:
@@ -75,6 +76,22 @@ class SheetsClient:
 
     def read_participants(self) -> list[dict[str, Any]]:
         return self.read_all_records(self.SHEET_PARTICIPANTS)
+
+    def read_leads(self) -> list[dict[str, Any]] | None:
+        """
+        Читає лист Leads. Повертає None, якщо листа немає (тоді облік лідів
+        просто вимкнено, решта бота працює як раніше) або читання не вдалось —
+        це НЕ повинно валити весь refresh. Self-heal: щойно лист з'явиться,
+        наступний цикл почне його читати автоматично.
+        """
+        try:
+            return self.read_all_records(self.SHEET_LEADS)
+        except Exception as e:
+            logger.warning(
+                "Лист %s недоступний (%s) — облік лідів вимкнено до появи листа",
+                self.SHEET_LEADS, e,
+            )
+            return None
 
     # ---- запис (застосування накопиченої черги, синхронно) ----
 

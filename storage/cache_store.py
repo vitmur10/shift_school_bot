@@ -49,6 +49,20 @@ class Lead:
 
 
 @dataclass
+class LeadRow:
+    """
+    Рядок листа Leads (персистентний облік заявок з форми — на відміну від
+    in-memory Lead вище, що живе лише між формою та оплатою).
+    row_index потрібен для точкового оновлення статусу на «оплатив».
+    """
+
+    phone: str          # нормалізований
+    status: str         # напр. "очікує оплату" / "оплатив"
+    row_index: int
+    raw_phone: str = ""
+
+
+@dataclass
 class CacheStore:
     streams: dict[str, Stream] = field(default_factory=dict)
 
@@ -60,6 +74,12 @@ class CacheStore:
 
     # ліди з форми Webflow, що чекають на підтвердження оплати від WayForPay
     pending_leads: dict[str, Lead] = field(default_factory=dict)  # normalized phone -> Lead
+
+    # персистентний облік заявок у листі Leads (читається з Sheets).
+    # leads_enabled=False, якщо листа Leads немає — тоді облік просто вимкнено,
+    # решта бота працює як раніше (повна зворотна сумісність).
+    leads_enabled: bool = False
+    leads_by_phone: dict[str, LeadRow] = field(default_factory=dict)  # normalized phone -> LeadRow
 
     last_synced_at: datetime | None = None
 
@@ -101,6 +121,10 @@ class CacheStore:
         """
         return self.pending_leads.pop(normalize_phone(phone_number), None)
 
+    def get_lead_row(self, phone_number: str) -> LeadRow | None:
+        """Рядок листа Leads за телефоном (для оновлення статусу на «оплатив»)."""
+        return self.leads_by_phone.get(normalize_phone(phone_number))
+
     # ---- запис у кеш (викликається ПІСЛЯ успішного enqueue у WriteQueue,
     # щоб handler одразу бачив оновлений стан, не чекаючи наступного refresh) ----
 
@@ -136,4 +160,6 @@ class CacheStore:
         self.participants_by_tg_id = other.participants_by_tg_id
         self.participants_by_username = other.participants_by_username
         self.participants_by_token = other.participants_by_token
+        self.leads_enabled = other.leads_enabled
+        self.leads_by_phone = other.leads_by_phone
         self.last_synced_at = other.last_synced_at or datetime.now(timezone.utc)

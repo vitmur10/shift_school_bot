@@ -100,6 +100,9 @@ class Plan:
     title: str
     start_date: datetime | None = None  # обов'язково для SCHEDULED, ігнорується для INSTANT
     is_active: bool = True
+    # особистий ТГ куратора (для тарифу з кураторством, напр. 3-й).
+    # Опціонально: якщо порожньо — кнопки «Написати куратору» не буде.
+    curator_url: str | None = None
 
     def is_scheduled(self) -> bool:
         return self.plan_type == PlanType.SCHEDULED
@@ -114,6 +117,9 @@ class Stream:
     is_active: bool = True
     stages: list[Stage] = field(default_factory=list)   # відсортовані за order
     plans: dict[str, Plan] = field(default_factory=dict)  # plan_id -> Plan
+    # інвайт-посилання на телеграм-групу цього потоку (self-service у таблиці).
+    # Опціонально: якщо порожньо — кнопки «Група потоку» не буде.
+    telegram_group_url: str | None = None
 
     def get_stage(self, order: int) -> Stage | None:
         """Повертає активний етап за порядковим номером, або None."""

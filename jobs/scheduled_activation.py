@@ -17,6 +17,7 @@ import logging
 from storage.cache_store import CacheStore
 from storage.models import ParticipantStatus, PlanType
 from storage.write_queue import PendingWrite, WriteQueue
+from bot.keyboards.stages_kb import access_opened_keyboard
 from services.access_control import activate_scheduled_plan, find_due_scheduled_participants
 from services.notifications import SendsMessages, notify_scheduled_access_opened
 
@@ -99,7 +100,14 @@ async def _try_send_notification(
     participant,
 ) -> bool:
     """Допоміжна: спроба надіслати сповіщення + оновити notification_sent при успіху."""
-    sent_ok = await notify_scheduled_access_opened(bot, participant)
+    # додаємо кнопки «Група потоку»/«Написати куратору», якщо задані в таблиці
+    stream = cache.get_stream(participant.stream_id)
+    plan = stream.get_plan(participant.plan_id) if stream else None
+    keyboard = access_opened_keyboard(
+        group_url=stream.telegram_group_url if stream else None,
+        curator_url=plan.curator_url if plan else None,
+    )
+    sent_ok = await notify_scheduled_access_opened(bot, participant, reply_markup=keyboard)
     if sent_ok:
         participant.notification_sent = True
         cache.upsert_participant(participant)

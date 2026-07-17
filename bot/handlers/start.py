@@ -22,7 +22,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from bot.keyboards.onboarding_kb import remove_keyboard, request_phone_keyboard
-from bot.keyboards.stages_kb import next_stage_keyboard
+from bot.keyboards.stages_kb import access_opened_keyboard, next_stage_keyboard
 from bot.states.onboarding import OnboardingStates
 from bot.texts import (
     ACCESS_BLOCKED,
@@ -167,8 +167,17 @@ async def _show_access_state(
     current_stage = get_current_stage(cache, participant)
     if current_stage is None:
         # доступ є, але учасник ще не бачив жодного етапу -- перший /start
-        # після відкриття доступу; показуємо привітання + кнопку "Далі"
-        await message.answer(ACCESS_GRANTED_FIRST_TIME, reply_markup=next_stage_keyboard())
+        # після відкриття доступу; показуємо привітання + кнопку "Далі",
+        # а також (якщо задано в таблиці) кнопки групи потоку та куратора.
+        stream = cache.get_stream(participant.stream_id)
+        plan = stream.get_plan(participant.plan_id) if stream else None
+        await message.answer(
+            ACCESS_GRANTED_FIRST_TIME,
+            reply_markup=access_opened_keyboard(
+                group_url=stream.telegram_group_url if stream else None,
+                curator_url=plan.curator_url if plan else None,
+            ),
+        )
         return
 
     # учасник уже десь усередині курсу (повторний /start) -- показуємо,

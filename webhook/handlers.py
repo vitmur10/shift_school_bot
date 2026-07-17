@@ -7,6 +7,12 @@ import hmac
 import logging
 import time
 import uuid
+from datetime import datetime, timezone
+
+
+def _now_iso() -> str:
+    """Час у форматі, який очікує _parse_datetime (напр. 2026-07-17 13:40:00)."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 from config import settings
 from services.token_service import generate_token
@@ -18,6 +24,22 @@ from webhook.schemas import WayForPayCallback, WebflowFormSubmission
 logger = logging.getLogger(__name__)
 
 SHEET_PARTICIPANTS = "Participants"
+SHEET_LEADS = "Leads"
+
+# статуси у листі Leads
+LEAD_STATUS_PENDING = "очікує оплату"
+LEAD_STATUS_PAID = "оплатив"
+
+# порядок колонок листа Leads (A..H). Заповнюється при заявці з форми;
+# статус/дата оплати/потік/тариф дозаповнюються після успішної оплати.
+LEADS_COLUMN_ORDER = [
+    "created_at", "phone_number", "telegram_username", "email",
+    "status", "paid_at", "stream_id", "plan_id",
+]
+LEADS_COL_STATUS = "E"
+LEADS_COL_PAID_AT = "F"
+LEADS_COL_STREAM = "G"
+LEADS_COL_PLAN = "H"
 
 # порядок МАЄ збігатись з порядком колонок у листі Participants (A..O)
 PARTICIPANTS_COLUMN_ORDER = [
@@ -57,14 +79,16 @@ PARTICIPANTS_COLUMN_MAP = {
 async def handle_webflow_lead(
     submission: WebflowFormSubmission,
     cache: CacheStore,
+    queue: WriteQueue | None = None,
 ) -> Lead:
     """
     Обробляє сирий form_submission webhook від Webflow (без оплати).
 
     На цьому етапі stream_id/plan_id ще невідомі — вони прийдуть пізніше
-    разом з callback-ом WayForPay. Тому НІЧОГО не пишемо у Sheets, лише
-    кладемо лід у пам'ять (CacheStore.pending_leads), щоб потім знайти
-    його за номером телефону, коли прийде підтвердження оплати.
+    разом з callback-ом WayForPay. Лід кладемо у пам'ять
+    (CacheStore.pending_leads) для подальшого матчингу за телефоном при
+    оплаті, а також (якщо є лист Leads) дописуємо рядок «очікує оплату»
+    у таблицю — щоб бачити тих, хто заповнив форму, але не оплатив.
     """
     logger.debug("Отримано webhook form_submission від Webflow: %r", submission)
 
@@ -76,6 +100,24 @@ async def handle_webflow_lead(
         email=data.Email,
     )
     cache.upsert_lead(lead)
+
+    # дописати рядок у лист Leads (лише якщо облік увімкнено — тобто лист існує).
+    # Пропускаємо, якщо цей телефон уже є у Leads, щоб не плодити дублі.
+    if queue is not None and cache.leads_enabled and cache.get_lead_row(lead.phone_number) is None:
+        row_values = [
+            _now_iso(),                 # A created_at
+            lead.raw_phone,             # B phone_number
+            lead.telegram_username or "",  # C telegram_username
+            lead.email or "",           # D email
+            LEAD_STATUS_PENDING,        # E status
+            "",                         # F paid_at
+            "",                         # G stream_id
+            "",                         # H plan_id
+        ]
+        await queue.enqueue_append(AppendRow(
+            sheet_name=SHEET_LEADS,
+            row_values=row_values,
+        ))
 
     logger.info(
         "Новий лід з форми Webflow: phone=%s telegram=%s (очікує оплату)",

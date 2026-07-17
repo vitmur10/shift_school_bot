@@ -51,7 +51,7 @@ def build_fastapi_app(cache: CacheStore, queue: WriteQueue) -> FastAPI:
         ДО оплати). Лише зберігає контакти (Telegram/телефон) у пам'яті --
         Participant тут НЕ створюється, у Sheets нічого не пишеться.
         """
-        lead = await handle_webflow_lead(submission, cache)
+        lead = await handle_webflow_lead(submission, cache, queue)
         return {"ok": True, "phone": lead.raw_phone}
 
     @app.post("/webhook/wayforpay")
