@@ -25,7 +25,9 @@ def normalize_phone(phone: str) -> str:
     Лишає лише цифри, відкидає ведучий '0' зайвих країнових префіксів не робимо —
     просто зводимо до "останні 9 цифр після коду країни 380", якщо номер укр.
     """
-    digits = re.sub(r"\D", "", phone or "")
+    # Google Sheets часто віддає телефон як число (int) і зрізає ведучий 0 —
+    # тому приводимо до рядка перед очищенням, інакше re.sub кине TypeError.
+    digits = re.sub(r"\D", "", str(phone) if phone not in (None, "") else "")
     if digits.startswith("380") and len(digits) >= 12:
         digits = digits[-9:]
     elif digits.startswith("0") and len(digits) == 10:
@@ -60,6 +62,7 @@ class LeadRow:
     status: str         # напр. "очікує оплату" / "оплатив"
     row_index: int
     raw_phone: str = ""
+    telegram_username: str = ""  # для запасного матчингу, якщо телефон не збігся
 
 
 @dataclass

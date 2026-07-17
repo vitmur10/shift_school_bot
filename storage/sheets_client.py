@@ -115,6 +115,17 @@ class SheetsClient:
             {"range": f"E{row_index}", "values": [[status]]},
         ])
 
+    def delete_leads_rows(self, row_indices: list[int]) -> None:
+        """
+        Видаляє рядки з листа Leads за їх номерами. Видаляємо у спадному
+        порядку, щоб номери решти рядків не «поїхали» під час видалення.
+        Використовується, коли лід оплатив — він лишається у Participants,
+        а з Leads прибирається (Leads = лише неоплачені).
+        """
+        ws = self._worksheet(self.SHEET_LEADS)
+        for idx in sorted({i for i in row_indices if i and i >= 2}, reverse=True):
+            ws.delete_rows(idx)
+
     def update_broadcast_status(
         self,
         row_index: int,

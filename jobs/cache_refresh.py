@@ -29,15 +29,7 @@ from storage.models import (
 )
 from storage.sheets_client import SheetsClient
 from storage.write_queue import AppendRow, PendingWrite, WriteQueue
-from webhook.handlers import (
-    LEAD_STATUS_PAID,
-    LEADS_COL_PAID_AT,
-    LEADS_COL_PLAN,
-    LEADS_COL_STATUS,
-    LEADS_COL_STREAM,
-    PARTICIPANTS_COLUMN_ORDER,
-    SHEET_LEADS,
-)
+from webhook.handlers import PARTICIPANTS_COLUMN_ORDER
 
 logger = logging.getLogger(__name__)
 
@@ -281,6 +273,7 @@ def build_cache_from_raw(
                 status=str(row.get("status", "")).strip(),
                 row_index=i + 2,  # рядок 1 — заголовок
                 raw_phone=raw_phone,
+                telegram_username=str(row.get("telegram_username") or "").strip(),
             )
 
     cache.last_synced_at = datetime.now(timezone.utc)
@@ -412,9 +405,15 @@ async def refresh_cache_once(
     if queue is not None:
         writes, appends = await queue.snapshot()
         _overlay_pending(new_cache, writes, appends)
-        # позначити у листі Leads тих, хто вже оплатив (телефон збігається
-        # з оплаченим учасником) — статус «оплатив» + дата/потік/тариф
-        await _reconcile_paid_leads(new_cache, queue)
+
+    # прибрати з листа Leads тих, хто вже оплатив (лишаються у Participants).
+    # ЗАХИЩЕНО try/except: збій реконсиляції НІКОЛИ не повинен зривати
+    # оновлення кешу (інакше row_index учасників «замерзає» на -1 і точкові
+    # записи, напр. current_stage_order, не потрапляють у таблицю).
+    try:
+        await _remove_paid_leads(new_cache, sheets)
+    except Exception:
+        logger.exception("Не вдалось прибрати оплачених лідів — пропускаю цей крок")
 
     cache.replace_with(new_cache)
 
@@ -425,49 +424,48 @@ async def refresh_cache_once(
     )
 
 
-async def _reconcile_paid_leads(new_cache: CacheStore, queue: WriteQueue) -> None:
+async def _remove_paid_leads(new_cache: CacheStore, sheets: SheetsClient) -> None:
     """
-    Для кожного ліда у листі Leads, чий телефон збігається з оплаченим
-    учасником, ставить статус «оплатив» (+ дата/потік/тариф). Ідемпотентно:
-    якщо статус уже «оплатив» — пропускаємо; дедуплікація черги не дасть
-    накопичити повторні записи між flush-ами.
+    Видаляє з листа Leads тих, хто вже оплатив (вони лишаються у Participants).
+    Тобто Leads = лише ті, хто заповнив форму, але НЕ оплатив — для дожиму.
+
+    Зіставлення ліда з оплатою — за телефоном АБО за telegram-username (бо
+    callback WayForPay не завжди містить телефон, і тоді в учасника лишається
+    лише username з форми). Працює однаково для всіх тарифів, зокрема instant.
     """
     if not new_cache.leads_enabled or not new_cache.leads_by_phone:
         return
 
-    # телефон -> учасник (оплачені = ті, хто взагалі є у Participants)
-    paid_by_phone: dict[str, "object"] = {}
+    paid_by_phone: dict[str, object] = {}
+    paid_by_username: dict[str, object] = {}
     for p in new_cache.all_participants():
         if p.phone_number:
             paid_by_phone[normalize_phone(p.phone_number)] = p
+        uname = p.normalized_username()
+        if uname:
+            paid_by_username[uname] = p
 
+    rows_to_delete: list[int] = []
     for lead in new_cache.leads_by_phone.values():
-        if lead.status.strip().lower() == LEAD_STATUS_PAID.lower():
-            continue
-        participant = paid_by_phone.get(lead.phone)
-        if participant is None or lead.row_index < 2:
-            continue
-        pid = participant.participant_id
-        await queue.enqueue(PendingWrite(
-            sheet_name=SHEET_LEADS, row_index=lead.row_index,
-            column=LEADS_COL_STATUS, value=LEAD_STATUS_PAID, participant_id=pid,
-        ))
-        await queue.enqueue(PendingWrite(
-            sheet_name=SHEET_LEADS, row_index=lead.row_index,
-            column=LEADS_COL_PAID_AT, value=_now_iso_sheets(), participant_id=pid,
-        ))
-        await queue.enqueue(PendingWrite(
-            sheet_name=SHEET_LEADS, row_index=lead.row_index,
-            column=LEADS_COL_STREAM, value=participant.stream_id, participant_id=pid,
-        ))
-        await queue.enqueue(PendingWrite(
-            sheet_name=SHEET_LEADS, row_index=lead.row_index,
-            column=LEADS_COL_PLAN, value=participant.plan_id, participant_id=pid,
-        ))
+        matched = None
+        if lead.phone:
+            matched = paid_by_phone.get(lead.phone)
+        if matched is None and lead.telegram_username:
+            matched = paid_by_username.get(lead.telegram_username.lstrip("@").lower())
+        if matched is not None and lead.row_index >= 2:
+            rows_to_delete.append(lead.row_index)
 
+    if not rows_to_delete:
+        return
 
-def _now_iso_sheets() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    await asyncio.to_thread(sheets.delete_leads_rows, rows_to_delete)
+    # прибираємо і з локального індексу, щоб лог/стан одразу були коректні
+    paid_rows = set(rows_to_delete)
+    new_cache.leads_by_phone = {
+        phone: lr for phone, lr in new_cache.leads_by_phone.items()
+        if lr.row_index not in paid_rows
+    }
+    logger.info("Прибрано з Leads (оплатили): %d", len(rows_to_delete))
 
 
 async def cache_refresh_loop(
