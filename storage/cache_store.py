@@ -12,8 +12,9 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 
+from utils.time import now_kyiv
 from storage.models import Participant, Stream
 
 
@@ -47,7 +48,7 @@ class Lead:
     telegram_username: str | None
     raw_phone: str
     email: str | None = None
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=now_kyiv)
 
 
 @dataclass
@@ -165,4 +166,4 @@ class CacheStore:
         self.participants_by_token = other.participants_by_token
         self.leads_enabled = other.leads_enabled
         self.leads_by_phone = other.leads_by_phone
-        self.last_synced_at = other.last_synced_at or datetime.now(timezone.utc)
+        self.last_synced_at = other.last_synced_at or now_kyiv()

@@ -4,3 +4,4 @@ uvicorn[standard]
 gspread
 oauth2client
 pydantic-settings
+tzdata

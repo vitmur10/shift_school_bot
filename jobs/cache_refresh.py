@@ -14,8 +14,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 
+from utils.time import KYIV_TZ, now_kyiv, to_kyiv
 from storage.cache_store import CacheStore, LeadRow, normalize_phone
 from storage.models import (
     ContentRef,
@@ -53,19 +54,20 @@ def _parse_int(value, default: int = 0) -> int:
 def _parse_datetime(value) -> datetime | None:
     """
     Очікує ISO-подібний рядок з Sheets (напр. '2026-07-01 10:00:00').
-    Порожнє значення -> None (для INSTANT-тарифів start_date не заповнюється).
+    Дати в таблиці трактуються як КИЇВСЬКИЙ час (напр. start_date 10:00 = 10:00
+    за Києвом). Порожнє значення -> None (для INSTANT start_date не заповнюється).
     """
     if not value:
         return None
     if isinstance(value, datetime):
-        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        return to_kyiv(value)
     text = str(value).strip()
     if not text:
         return None
     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
         try:
             dt = datetime.strptime(text, fmt)
-            return dt.replace(tzinfo=timezone.utc)
+            return dt.replace(tzinfo=KYIV_TZ)
         except ValueError:
             continue
     logger.warning("Не вдалося розпарсити дату/час: %r", value)
@@ -254,6 +256,8 @@ def build_cache_from_raw(
             is_active=_parse_bool(row.get("is_active", True)),
             curator_url=(str(row.get("curator_url")).strip() or None)
             if row.get("curator_url") else None,
+            chat_url=(str(row.get("chat_url")).strip() or None)
+            if row.get("chat_url") else None,
         )
 
     for i, row in enumerate(participants_rows):
@@ -277,7 +281,7 @@ def build_cache_from_raw(
                 telegram_username=str(row.get("telegram_username") or "").strip(),
             )
 
-    cache.last_synced_at = datetime.now(timezone.utc)
+    cache.last_synced_at = now_kyiv()
     return cache
 
 

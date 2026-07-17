@@ -53,7 +53,7 @@ BROADCASTS_COLUMN_ORDER = [
 ]
 
 STREAMS_NEW_COLUMNS = ["telegram_group_url"]
-PLANS_NEW_COLUMNS = ["curator_url"]
+PLANS_NEW_COLUMNS = ["curator_url", "chat_url"]
 STAGES_NEW_COLUMNS = ["only_scheduled"]
 
 SHEET_STREAMS = "Streams"

@@ -18,8 +18,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
 
+from utils.time import now_kyiv_str
 from services.notifications import SendsMessages
 from storage.cache_store import CacheStore
 from storage.models import ParticipantStatus
@@ -38,7 +38,7 @@ SEND_DELAY_SEC = 0.05
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    return now_kyiv_str()
 
 
 def _recipients(cache: CacheStore, stream_id: str, plan_id: str) -> list:

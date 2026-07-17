@@ -7,12 +7,13 @@ import hmac
 import logging
 import time
 import uuid
-from datetime import datetime, timezone
+
+from utils.time import now_kyiv_str
 
 
 def _now_iso() -> str:
-    """Час у форматі, який очікує _parse_datetime (напр. 2026-07-17 13:40:00)."""
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    """Київський час у форматі, який очікує _parse_datetime (напр. 2026-07-17 13:40:00)."""
+    return now_kyiv_str()
 
 from config import settings
 from services.token_service import generate_token

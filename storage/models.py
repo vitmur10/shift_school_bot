@@ -106,6 +106,8 @@ class Plan:
     # особистий ТГ куратора (для тарифу з кураторством, напр. 3-й).
     # Опціонально: якщо порожньо — кнопки «Написати куратору» не буде.
     curator_url: str | None = None
+    # посилання на чат тарифу. Опціонально: порожньо — кнопки «Чат» не буде.
+    chat_url: str | None = None
 
     def is_scheduled(self) -> bool:
         return self.plan_type == PlanType.SCHEDULED

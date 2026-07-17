@@ -13,12 +13,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
+from utils.time import now_kyiv
 from storage.cache_store import CacheStore
 from storage.models import ParticipantStatus, PlanType
 from storage.write_queue import PendingWrite, WriteQueue
-from bot.keyboards.stages_kb import access_opened_keyboard
+from bot.keyboards.stages_kb import access_opened_keyboard, reminder_keyboard
 from bot.texts import REMINDER_1H, reminder_24h_text
 from services.access_control import activate_scheduled_plan, find_due_scheduled_participants
 from services.notifications import SendsMessages, notify_participant, notify_scheduled_access_opened
@@ -168,7 +169,7 @@ async def process_reminders(
     шлемо лише найтерміновіше (менше годин), а решту прострочених просто
     позначаємо як надіслані, щоб не спамити застарілим «до старту доба».
     """
-    now = now or datetime.now(timezone.utc)
+    now = now or now_kyiv()
     count = 0
 
     for p in cache.all_participants():
@@ -191,7 +192,11 @@ async def process_reminders(
 
         # найтерміновіше нагадування (найменше годин до старту)
         hours_to_send = min(due)
-        sent_ok = await notify_participant(bot, p, _reminder_text(hours_to_send, plan.start_date))
+        # у пре-стартові нагадування додаємо кнопки чату/куратора тарифу
+        keyboard = reminder_keyboard(chat_url=plan.chat_url, curator_url=plan.curator_url)
+        sent_ok = await notify_participant(
+            bot, p, _reminder_text(hours_to_send, plan.start_date), reply_markup=keyboard,
+        )
         if not sent_ok:
             logger.warning(
                 "Не вдалось надіслати нагадування (participant_id=%s, за %d год) — повтор наступного циклу",

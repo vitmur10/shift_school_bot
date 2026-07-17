@@ -16,9 +16,10 @@ advance_to_next_stage нижче.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import Enum
 
+from utils.time import now_kyiv
 from storage.cache_store import CacheStore
 from storage.models import Participant, ParticipantStatus, Plan, PlanType, Stage, Stream
 from storage.write_queue import PendingWrite, WriteQueue
@@ -138,7 +139,7 @@ async def advance_to_next_stage(
         return AccessCheckResult(AccessDecision.NO_MORE_STAGES), None
 
     participant.current_stage_order = next_stage.order
-    participant.last_progress_at = datetime.now(timezone.utc)
+    participant.last_progress_at = now_kyiv()
     cache.upsert_participant(participant)
 
     await queue.enqueue(PendingWrite(
@@ -170,7 +171,7 @@ async def activate_scheduled_plan(
         return  # вже активовано, ідемпотентно виходимо
 
     participant.status = ParticipantStatus.ACTIVE
-    participant.activated_at = datetime.now(timezone.utc)
+    participant.activated_at = now_kyiv()
     cache.upsert_participant(participant)
 
     await queue.enqueue(PendingWrite(
@@ -187,7 +188,7 @@ def find_due_scheduled_participants(cache: CacheStore, now: datetime | None = No
     Повертає всіх PENDING-учасників на SCHEDULED-тарифах, чия start_date
     вже настала — для jobs/scheduled_activation.py.
     """
-    now = now or datetime.now(timezone.utc)
+    now = now or now_kyiv()
     due: list[Participant] = []
 
     for participant in cache.all_participants():
