@@ -27,7 +27,6 @@ from bot.states.onboarding import OnboardingStates
 from bot.texts import (
     ACCESS_BLOCKED,
     ACCESS_GRANTED_FIRST_TIME,
-    ACCESS_NOT_YET_SCHEDULED,
     ASK_FOR_PHONE,
     ASK_FOR_TOKEN,
     COURSE_COMPLETED,
@@ -38,6 +37,7 @@ from bot.texts import (
     WELCOME_BACK,
     WELCOME_NEW_USER,
     format_stage_message,
+    not_yet_scheduled_text,
 )
 from services.access_control import AccessDecision, check_course_access, get_current_stage
 from services.identification import identify_by_phone, identify_participant
@@ -152,7 +152,11 @@ async def _show_access_state(
         return
 
     if access.decision == AccessDecision.NOT_YET_SCHEDULED:
-        await message.answer(ACCESS_NOT_YET_SCHEDULED)
+        # показуємо дату старту, якщо вона відома з тарифу
+        stream = cache.get_stream(participant.stream_id)
+        plan = stream.get_plan(participant.plan_id) if stream else None
+        start_date = plan.start_date if plan else None
+        await message.answer(not_yet_scheduled_text(start_date))
         return
 
     if access.decision in (AccessDecision.NO_STREAM, AccessDecision.NO_PLAN):

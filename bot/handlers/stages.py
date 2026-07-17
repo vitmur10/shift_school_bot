@@ -24,10 +24,10 @@ from aiogram.types import CallbackQuery
 from bot.keyboards.stages_kb import NEXT_STAGE_CALLBACK, next_stage_keyboard
 from bot.texts import (
     ACCESS_BLOCKED,
-    ACCESS_NOT_YET_SCHEDULED,
     COURSE_COMPLETED,
     DATA_INCONSISTENCY_ERROR,
     format_stage_message,
+    not_yet_scheduled_text,
 )
 from services.access_control import AccessDecision, advance_to_next_stage
 from services.content_delivery import CopiesMessages, deliver_full_stage, TELEGRAM_CAPTION_LIMIT
@@ -83,7 +83,10 @@ async def handle_next_stage(
         return
 
     if access.decision == AccessDecision.NOT_YET_SCHEDULED:
-        await callback.message.answer(ACCESS_NOT_YET_SCHEDULED)
+        stream = cache.get_stream(participant.stream_id)
+        plan = stream.get_plan(participant.plan_id) if stream else None
+        start_date = plan.start_date if plan else None
+        await callback.message.answer(not_yet_scheduled_text(start_date))
         return
 
     if not access.granted or stage is None:

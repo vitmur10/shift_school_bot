@@ -158,6 +158,9 @@ class Participant:
     activated_at: datetime | None = None
     last_progress_at: datetime | None = None
 
+    # які нагадування-прогрів уже надіслані (напр. "24,1") — щоб не дублювати
+    reminders_sent: str = ""
+
     def is_active(self) -> bool:
         return self.status == ParticipantStatus.ACTIVE
 

@@ -53,6 +53,42 @@ ACCESS_NOT_YET_SCHEDULED = (
     "Ми сповістимо тебе одразу, як курс стартує — нічого робити не потрібно."
 )
 
+# те саме, але з конкретною датою старту (коли вона відома з тарифу)
+ACCESS_NOT_YET_SCHEDULED_WITH_DATE = (
+    "Дякуємо, тебе зареєстровано! 🎉\n"
+    "Доступ до курсу відкриється {date}.\n"
+    "Щойно стартуємо — надішлемо повідомлення просто сюди, нічого робити не потрібно."
+)
+
+
+def not_yet_scheduled_text(start_date) -> str:
+    """
+    Текст для scheduled-учасника, який зайшов ДО старту.
+    Якщо дата старту відома — показуємо її (тільки дата, DD.MM.YYYY),
+    інакше — загальний текст без конкретики.
+    """
+    if start_date is None:
+        return ACCESS_NOT_YET_SCHEDULED
+    return ACCESS_NOT_YET_SCHEDULED_WITH_DATE.format(date=start_date.strftime("%d.%m.%Y"))
+
+
+# ---- нагадування-прогрів до старту (scheduled-тариф) ----
+
+REMINDER_24H = (
+    "Нагадуємо: курс стартує вже завтра, {date} 🚀\n"
+    "Готуйся — щойно відкриємо доступ, надішлемо сюди повідомлення."
+)
+
+REMINDER_1H = (
+    "Курс стартує вже за годину! ⏰\n"
+    "Зовсім скоро надішлемо тобі доступ до першого етапу."
+)
+
+
+def reminder_24h_text(start_date) -> str:
+    date = start_date.strftime("%d.%m.%Y") if start_date else ""
+    return REMINDER_24H.format(date=date)
+
 ACCESS_GRANTED_FIRST_TIME = "Доступ відкрито! 🎉 Тисни «Далі», щоб почати перший етап."
 
 COURSE_COMPLETED = "Це був останній етап. 🎓 Вітаємо із завершенням курсу!"

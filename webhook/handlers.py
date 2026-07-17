@@ -41,12 +41,13 @@ LEADS_COL_PAID_AT = "F"
 LEADS_COL_STREAM = "G"
 LEADS_COL_PLAN = "H"
 
-# порядок МАЄ збігатись з порядком колонок у листі Participants (A..O)
+# порядок МАЄ збігатись з порядком колонок у листі Participants (A..P)
 PARTICIPANTS_COLUMN_ORDER = [
     "participant_id", "telegram_id", "telegram_username", "phone_number",
     "stream_id", "plan_id", "access_token", "token_used", "status",
     "current_stage_order", "fsm_state",
     "joined_at", "activated_at", "last_progress_at", "notification_sent",
+    "reminders_sent",
 ]
 
 # буква колонки Sheets -> позиція в PARTICIPANTS_COLUMN_ORDER / row_values.
@@ -69,6 +70,7 @@ PARTICIPANTS_COLUMN_MAP = {
     "M": 12,  # activated_at
     "N": 13,  # last_progress_at
     "O": 14,  # notification_sent (узгоджено з jobs/scheduled_activation.py COL_NOTIFICATION_SENT)
+    "P": 15,  # reminders_sent (узгоджено з jobs/scheduled_activation.py COL_REMINDERS_SENT)
 }
 
 
@@ -318,6 +320,7 @@ async def handle_wayforpay_payment(
         "",                                    # M activated_at
         "",                                    # N last_progress_at
         participant.notification_sent,         # O notification_sent
+        participant.reminders_sent,            # P reminders_sent
     ]
     logger.debug(
         "row_values для append у Sheets (%s), порядок колонок %s: %r",

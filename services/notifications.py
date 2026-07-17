@@ -29,24 +29,23 @@ DEFAULT_SCHEDULED_START_TEXT = (
 )
 
 
-async def notify_scheduled_access_opened(
+async def notify_participant(
     bot: SendsMessages,
     participant: Participant,
-    text: str = DEFAULT_SCHEDULED_START_TEXT,
+    text: str,
     reply_markup: Any = None,
 ) -> bool:
     """
-    Надсилає повідомлення про відкриття доступу. Повертає True/False —
-    успіх чи ні, щоб виклик (jobs/scheduled_activation.py) міг вирішити,
-    позначати participant.notification_sent чи спробувати пізніше.
+    Універсальна розсилка одного повідомлення учаснику. Повертає True/False —
+    успіх чи ні (щоб виклик міг вирішити, позначати відправлене чи повторити).
 
-    Помилки (заблокований бот користувачем, видалений акаунт тощо)
-    логуються, але не кидаються — одна невдала розсилка не повинна
-    зупиняти обробку решти учасників у циклі.
+    Помилки (заблокований бот, видалений акаунт тощо) логуються, але НЕ
+    кидаються — одна невдала розсилка не повинна зупиняти обробку решти
+    учасників у циклі.
     """
     if participant.telegram_id is None:
         logger.warning(
-            "Не можу надіслати сповіщення: відсутній telegram_id (participant_id=%s)",
+            "Не можу надіслати повідомлення: відсутній telegram_id (participant_id=%s)",
             participant.participant_id,
         )
         return False
@@ -56,7 +55,17 @@ async def notify_scheduled_access_opened(
         return True
     except Exception:
         logger.exception(
-            "Не вдалося надіслати сповіщення про старт (participant_id=%s, telegram_id=%s)",
+            "Не вдалося надіслати повідомлення (participant_id=%s, telegram_id=%s)",
             participant.participant_id, participant.telegram_id,
         )
         return False
+
+
+async def notify_scheduled_access_opened(
+    bot: SendsMessages,
+    participant: Participant,
+    text: str = DEFAULT_SCHEDULED_START_TEXT,
+    reply_markup: Any = None,
+) -> bool:
+    """Сповіщення про відкриття доступу (обгортка над notify_participant)."""
+    return await notify_participant(bot, participant, text, reply_markup=reply_markup)
