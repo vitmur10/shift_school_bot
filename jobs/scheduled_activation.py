@@ -20,7 +20,7 @@ from storage.cache_store import CacheStore
 from storage.models import ParticipantStatus, PlanType
 from storage.write_queue import PendingWrite, WriteQueue
 from bot.keyboards.stages_kb import access_opened_keyboard, reminder_keyboard
-from bot.texts import REMINDER_1H, reminder_24h_text
+from bot.texts import REMINDER_3D, REMINDER_1D, reminder_7d_text
 from services.access_control import activate_scheduled_plan, find_due_scheduled_participants
 from services.notifications import SendsMessages, notify_participant, notify_scheduled_access_opened
 
@@ -30,8 +30,8 @@ COL_NOTIFICATION_SENT = "O"  # у листі Participants: L joined_at, M activa
 COL_REMINDERS_SENT = "P"     # які нагадування-прогрів уже надіслані (напр. "24,1")
 
 # нагадування-прогрів: за скільки годин до старту слати. Порядок від
-# більшого до меншого (спершу «за добу», потім «за годину»).
-REMINDER_HOURS = (24, 1)
+# більшого до меншого (спершу «за тиждень», потім «за 3 дні», потім «за день»).
+REMINDER_HOURS = (24 * 7, 24 * 3, 24)
 
 
 def _parse_reminders_sent(value: str) -> set[int]:
@@ -44,9 +44,11 @@ def _format_reminders_sent(hours: set[int]) -> str:
 
 def _reminder_text(hours: int, start_date) -> str:
     """Текст нагадування залежно від того, за скільки годин до старту."""
-    if hours >= 24:
-        return reminder_24h_text(start_date)
-    return REMINDER_1H
+    if hours >= 24 * 7:
+        return reminder_7d_text(start_date)
+    if hours >= 24 * 3:
+        return REMINDER_3D
+    return REMINDER_1D
 
 
 def _find_unsent_notifications(cache: CacheStore):

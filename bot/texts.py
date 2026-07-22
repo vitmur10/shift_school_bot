@@ -72,22 +72,31 @@ def not_yet_scheduled_text(start_date) -> str:
     return ACCESS_NOT_YET_SCHEDULED_WITH_DATE.format(date=start_date.strftime("%d.%m.%Y"))
 
 
-# ---- нагадування-прогрів до старту (scheduled-тариф) ----
+# ---- нагадування-прогрів до старту (scheduled-тариф, тарифи 2 і 3) ----
 
-REMINDER_24H = (
-    "Нагадуємо: курс стартує вже завтра, {date} 🚀\n"
-    "Готуйся — щойно відкриємо доступ, надішлемо сюди повідомлення."
+REMINDER_7D = (
+    "Привіт👋 Вітаємо тебе з першими кроками на шляху до нової професії🎉\n\n"
+    "У цьому боті ти отримаєш всю необхідно інформацію для вивчення нейродизайну "
+    "разом із Shift School🧡\n\n"
+    "До зустрічі {date}"
 )
 
-REMINDER_1H = (
-    "Курс стартує вже за годину! ⏰\n"
-    "Зовсім скоро надішлемо тобі доступ до першого етапу."
+REMINDER_3D = (
+    "Хєй! Як справи? Вже незабаром зустрінемось на першому уроці 😎\n\n"
+    "Залишився всього рівно тиждень📆"
+)
+
+REMINDER_1D = (
+    "Привіт! Сподіваюсь, ти чекаєш старту в бойовій готовності і вже завтра "
+    "зробиш перші кроки в АІ-дизайні🔥\n\n"
+    "О 10:00 ти отримаєш перший урок❗️\n\n"
+    "До зустрічі🫂"
 )
 
 
-def reminder_24h_text(start_date) -> str:
+def reminder_7d_text(start_date) -> str:
     date = start_date.strftime("%d.%m.%Y") if start_date else ""
-    return REMINDER_24H.format(date=date)
+    return REMINDER_7D.format(date=date)
 
 ACCESS_GRANTED_FIRST_TIME = "Доступ відкрито! 🎉 Тисни «Далі», щоб почати перший етап."
 
