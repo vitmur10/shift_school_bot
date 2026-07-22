@@ -18,7 +18,7 @@ def _now_iso() -> str:
 from config import settings
 from services.token_service import generate_token
 from storage.cache_store import CacheStore, Lead, normalize_phone
-from storage.models import Participant, ParticipantStatus
+from storage.models import Participant, ParticipantStatus, PlanType
 from storage.write_queue import AppendRow, WriteQueue
 from webhook.schemas import WayForPayCallback, WebflowFormSubmission
 
@@ -286,6 +286,27 @@ async def handle_wayforpay_payment(
             callback.orderReference,
         )
 
+    # Статус одразу після оплати залежить від типу тарифу:
+    # - INSTANT  -> ACTIVE одразу (доступ є, як тільки прив'яжеться токен через /start)
+    # - SCHEDULED -> PENDING (чекає групової активації в потрібну start_date;
+    #   саме в стані PENDING учасник потрапляє в jobs/scheduled_activation.py
+    #   для нагадувань-прогріву та подальшої активації). Якщо тариф не
+    #   знайдено в кеші (розсинхронізовані дані) -- лишаємо ACTIVE, щоб не
+    #   заблокувати оплаченому клієнту доступ; логуємо для ручної перевірки.
+    stream = cache.get_stream(stream_id)
+    plan = stream.get_plan(plan_id) if stream else None
+    if plan is not None and plan.plan_type == PlanType.SCHEDULED:
+        initial_status = ParticipantStatus.PENDING
+    else:
+        initial_status = ParticipantStatus.ACTIVE
+        if plan is None:
+            logger.warning(
+                "Тариф stream_id=%s plan_id=%s не знайдено в кеші при створенні Participant "
+                "з оплати orderReference=%s -- статус виставлено ACTIVE за замовчуванням, "
+                "перевір вручну, чи це справді INSTANT-тариф.",
+                stream_id, plan_id, callback.orderReference,
+            )
+
     participant = Participant(
         participant_id=str(uuid.uuid4()),
         telegram_id=None,
@@ -295,7 +316,7 @@ async def handle_wayforpay_payment(
         plan_id=plan_id,
         access_token=generate_token(),
         token_used=False,
-        status=ParticipantStatus.ACTIVE,
+        status=initial_status,
         current_stage_order=0,
         fsm_state=None,
         notification_sent=False,
