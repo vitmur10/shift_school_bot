@@ -59,7 +59,7 @@ def start_notification_keyboard(
         builder.button(text=WELCOME_CHAT_BUTTON_TEXT, url=chat_url)
     if mentor_url:
         builder.button(text=WELCOME_MENTOR_BUTTON_TEXT, url=mentor_url)
-    if not builder.rows:
+    if not builder.keyboard.inline_keyboard:
         return None
     builder.adjust(1)
     return builder.as_markup()
