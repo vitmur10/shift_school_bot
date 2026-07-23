@@ -5,7 +5,6 @@ Inline-кнопки для видачі етапів курсу ("Далі" то
 from __future__ import annotations
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 NEXT_STAGE_CALLBACK = "next_stage"
 
@@ -54,15 +53,12 @@ def start_notification_keyboard(
     (chat_url, curator_url). Якщо жодне посилання не задане — повертає
     None, і повідомлення відправляється без клавіатури.
     """
-    builder = InlineKeyboardBuilder()
+    rows: list[list[InlineKeyboardButton]] = []
     if chat_url:
-        builder.button(text=WELCOME_CHAT_BUTTON_TEXT, url=chat_url)
+        rows.append([InlineKeyboardButton(text=WELCOME_CHAT_BUTTON_TEXT, url=chat_url)])
     if mentor_url:
-        builder.button(text=WELCOME_MENTOR_BUTTON_TEXT, url=mentor_url)
-    if not builder.keyboard.inline_keyboard:
-        return None
-    builder.adjust(1)
-    return builder.as_markup()
+        rows.append([InlineKeyboardButton(text=WELCOME_MENTOR_BUTTON_TEXT, url=mentor_url)])
+    return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
 
 
 def access_opened_keyboard(
