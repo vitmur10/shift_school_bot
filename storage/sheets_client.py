@@ -74,7 +74,7 @@ class SheetsClient:
         if not values:
             return []
 
-        header = [str(h).strip() for h in values[0]]
+        header = [str(h).strip().lower() for h in values[0]]
         records: list[dict[str, Any]] = []
         for raw_row in values[1:]:
             record: dict[str, Any] = {}
