@@ -22,7 +22,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from bot.keyboards.onboarding_kb import remove_keyboard, request_phone_keyboard
-from bot.keyboards.stages_kb import access_opened_keyboard, next_stage_keyboard
+from bot.keyboards.stages_kb import next_stage_keyboard, start_notification_keyboard
 from bot.states.onboarding import OnboardingStates
 from bot.texts import (
     ACCESS_BLOCKED,
@@ -177,9 +177,9 @@ async def _show_access_state(
         plan = stream.get_plan(participant.plan_id) if stream else None
         await message.answer(
             ACCESS_GRANTED_FIRST_TIME,
-            reply_markup=access_opened_keyboard(
-                group_url=stream.telegram_group_url if stream else None,
-                curator_url=plan.curator_url if plan else None,
+            reply_markup=start_notification_keyboard(
+                chat_url=plan.chat_url if plan else None,
+                mentor_url=plan.curator_url if plan else None,
             ),
         )
         return
