@@ -45,20 +45,21 @@ WELCOME_MENTOR_BUTTON_TEXT = "👤 Написати ментору"
 def start_notification_keyboard(
     chat_url: str | None = None,
     mentor_url: str | None = None,
-) -> InlineKeyboardMarkup | None:
+) -> InlineKeyboardMarkup:
     """
     Клавіатура для привітального сповіщення про старт курсу.
 
-    Кнопки додаються лише якщо відповідні посилання задані в Plans
-    (chat_url, curator_url). Якщо жодне посилання не задане — повертає
-    None, і повідомлення відправляється без клавіатури.
+    Завжди містить кнопку «Далі» (перехід до першого етапу), а також
+    (якщо задано в таблиці) кнопки чату та ментора.
     """
-    rows: list[list[InlineKeyboardButton]] = []
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text="Далі", callback_data=NEXT_STAGE_CALLBACK)],
+    ]
     if chat_url:
         rows.append([InlineKeyboardButton(text=WELCOME_CHAT_BUTTON_TEXT, url=chat_url)])
     if mentor_url:
         rows.append([InlineKeyboardButton(text=WELCOME_MENTOR_BUTTON_TEXT, url=mentor_url)])
-    return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def access_opened_keyboard(
