@@ -17,7 +17,7 @@ def next_stage_keyboard(button_text: str = "Далі") -> InlineKeyboardMarkup:
 
 
 GROUP_BUTTON_TEXT = "👥 Група потоку"
-CURATOR_BUTTON_TEXT = "✍️ Написати куратору"
+CURATOR_BUTTON_TEXT = "✍️ Написати ментору"
 CHAT_BUTTON_TEXT = "💬 Чат потоку"
 
 
