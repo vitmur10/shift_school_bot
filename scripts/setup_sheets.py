@@ -50,6 +50,7 @@ LEADS_COLUMN_ORDER = [
 BROADCASTS_COLUMN_ORDER = [
     "created_at", "stream_id", "plan_id", "message",
     "status", "sent_at", "sent_count", "note",
+    "media", "button_url", "button_text",
 ]
 
 STREAMS_NEW_COLUMNS = ["telegram_group_url"]

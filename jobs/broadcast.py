@@ -18,6 +18,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Any
+
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from utils.time import now_kyiv_str
 from services.notifications import SendsMessages
@@ -39,6 +42,51 @@ SEND_DELAY_SEC = 0.05
 
 def _now() -> str:
     return now_kyiv_str()
+
+
+def _build_button_keyboard(button_url: str, button_text: str) -> InlineKeyboardMarkup | None:
+    """Будує клавіатуру з однією URL-кнопкою, якщо button_url задано."""
+    if not button_url:
+        return None
+    text = button_text.strip() if button_text and button_text.strip() else "Перейти"
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text=text, url=button_url)]]
+    )
+
+
+def _detect_media_type(media: str) -> str:
+    """Визначає тип медіа за file_id або URL."""
+    media = media.lower()
+    if any(ext in media for ext in (".jpg", ".jpeg", ".png", ".gif", ".webp", "photo")):
+        return "photo"
+    if any(ext in media for ext in (".mp4", ".mov", ".avi", ".mkv", "video")):
+        return "video"
+    return "document"
+
+
+async def _send_broadcast_message(
+    bot: SendsMessages,
+    chat_id: int,
+    message: str,
+    media: str | None,
+    keyboard: InlineKeyboardMarkup | None,
+) -> bool:
+    """Надсилає повідомлення (з медіа або без) з опціональною клавіатурою."""
+    try:
+        if media:
+            media_type = _detect_media_type(media)
+            if media_type == "photo":
+                await bot.send_photo(chat_id=chat_id, photo=media, caption=message, reply_markup=keyboard)
+            elif media_type == "video":
+                await bot.send_video(chat_id=chat_id, video=media, caption=message, reply_markup=keyboard)
+            else:
+                await bot.send_document(chat_id=chat_id, document=media, caption=message, reply_markup=keyboard)
+        else:
+            await bot.send_message(chat_id=chat_id, text=message, reply_markup=keyboard)
+        return True
+    except Exception:
+        logger.exception("Не вдалося надіслати повідомлення chat_id=%s", chat_id)
+        return False
 
 
 def _recipients(cache: CacheStore, stream_id: str, plan_id: str) -> list:
@@ -81,6 +129,9 @@ async def process_broadcasts(
         message = str(row.get("message", "")).strip()
         stream_id = str(row.get("stream_id", "")).strip()
         plan_id = str(row.get("plan_id", "")).strip()
+        media = str(row.get("media", "")).strip() or None
+        button_url = str(row.get("button_url", "")).strip() or None
+        button_text = str(row.get("button_text", "")).strip() or None
 
         # одразу «застовпити» рядок, щоб не розіслати повторно
         await asyncio.to_thread(sheets.set_broadcast_status, row_index, STATUS_PROCESSING)
@@ -98,13 +149,14 @@ async def process_broadcasts(
             )
             continue
 
+        keyboard = _build_button_keyboard(button_url, button_text)
         recipients = _recipients(cache, stream_id, plan_id)
         delivered, failed = 0, 0
         for p in recipients:
-            try:
-                await bot.send_message(chat_id=p.telegram_id, text=message)
+            ok = await _send_broadcast_message(bot, p.telegram_id, message, media, keyboard)
+            if ok:
                 delivered += 1
-            except Exception:
+            else:
                 failed += 1
                 logger.warning(
                     "Розсилка: не доставлено participant_id=%s (tg_id=%s)",
