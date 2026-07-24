@@ -80,6 +80,9 @@ class Stage:
     # TRUE = етап лише для тарифів зі стартом за датою (scheduled);
     # для instant-тарифів (доступ одразу) такий етап пропускається.
     only_scheduled: bool = False
+    # Список plan_id, для яких доступний цей етап (якщо порожній — доступний для всіх).
+    # Приклад: "plan_basic,plan_pro" — етап лише для цих тарифів.
+    plan_ids: list[str] = field(default_factory=list)
 
     def active_circle_refs(self) -> list[ContentRef]:
         """Повертає лише заповнені посилання на кружечки."""

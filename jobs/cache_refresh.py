@@ -210,6 +210,10 @@ def build_cache_from_raw(
                 [(ref.media_type.value, ref.file_id) for ref in media_group],
             )
 
+        # план_ids: кома-розділений список; порожнє = доступний для всіх
+        raw_plan_ids = str(row.get("plan_ids", "")).strip()
+        plan_ids = [p.strip() for p in raw_plan_ids.split(",") if p.strip()] if raw_plan_ids else []
+
         stream.stages.append(Stage(
             stage_id=row.get("stage_id", ""),
             stream_id=stream_id,
@@ -225,6 +229,7 @@ def build_cache_from_raw(
             unlock_button_text=row.get("unlock_button_text") or "Далі",
             is_active=_parse_bool(row.get("is_active", True)),
             only_scheduled=_parse_bool(row.get("only_scheduled", False)),
+            plan_ids=plan_ids,
         ))
 
     for row in plans_rows:

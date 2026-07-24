@@ -55,7 +55,7 @@ BROADCASTS_COLUMN_ORDER = [
 
 STREAMS_NEW_COLUMNS = ["telegram_group_url"]
 PLANS_NEW_COLUMNS = ["curator_url", "chat_url"]
-STAGES_NEW_COLUMNS = ["only_scheduled"]
+STAGES_NEW_COLUMNS = ["only_scheduled", "plan_ids"]
 
 SHEET_STREAMS = "Streams"
 SHEET_STAGES = "Stages"
@@ -160,6 +160,10 @@ def ensure_sheet_with_headers(ss, sheet_name: str, columns: list[str]) -> None:
         have = {h.lower() for h in header}
         missing = [c for c in columns if c.lower() not in have]
         if missing:
+            # розширити сітку, якщо потрібно більше колонок
+            needed_cols = len(header) + len(missing)
+            if needed_cols > ws.col_count:
+                ws.resize(cols=needed_cols + 5)
             for col in missing:
                 ws.update_cell(1, len(header) + 1, col)
                 header.append(col)

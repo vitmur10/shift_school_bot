@@ -88,33 +88,42 @@ def get_current_stage(cache: CacheStore, participant: Participant) -> Stage | No
     return stream.get_stage(participant.current_stage_order)
 
 
+def _stage_visible_for_plan(stage: Stage, plan: Plan | None) -> bool:
+    """Перевіряє, чи етап доступний для даного тарифу."""
+    if not stage.is_active:
+        return False
+    # якщо plan_ids порожній — етап доступний для всіх
+    if stage.plan_ids and plan and plan.plan_id not in stage.plan_ids:
+        return False
+    # only_scheduled: для instant-тарифу пропускаємо
+    if plan and plan.plan_type == PlanType.INSTANT and stage.only_scheduled:
+        return False
+    return True
+
+
 def get_next_stage(cache: CacheStore, participant: Participant) -> Stage | None:
     """
     Повертає НАСТУПНИЙ доступний етап (за current_stage_order) або None,
     якщо курс завершено.
 
-    Для instant-тарифів (доступ одразу) пропускаємо етапи, позначені
-    only_scheduled=TRUE (напр. привітання «стартуємо о 18:00», запрошення
-    до групи, «за 30 хвилин») — вони мають сенс лише для спільного старту
-    за датою. Для scheduled-тарифів показуємо всі етапи.
+    Фільтрація етапів:
+      - is_active
+      - plan_ids (якщо задано — лише для вказаних тарифів)
+      - only_scheduled (для instant-тарифу пропускаємо «пре-стартові» етапи)
     """
     stream = cache.get_stream(participant.stream_id)
     if stream is None:
         return None
 
     plan = stream.get_plan(participant.plan_id)
-    is_instant = plan is not None and plan.plan_type == PlanType.INSTANT
 
     candidates = sorted(
         (s for s in stream.stages
-         if s.is_active and s.order > participant.current_stage_order),
+         if s.order > participant.current_stage_order
+         and _stage_visible_for_plan(s, plan)),
         key=lambda s: s.order,
     )
-    for stage in candidates:
-        if is_instant and stage.only_scheduled:
-            continue  # пропускаємо «пре-стартові» етапи для instant-тарифу
-        return stage
-    return None
+    return candidates[0] if candidates else None
 
 
 async def advance_to_next_stage(
