@@ -12,7 +12,7 @@ NEXT_STAGE_CALLBACK = "next_stage"
 def next_stage_keyboard(button_text: str = "Далі") -> InlineKeyboardMarkup:
     """Одна кнопка переходу до наступного етапу."""
     return InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text=button_text, callback_data=NEXT_STAGE_CALLBACK)]]
+        inline_keyboard=[[InlineKeyboardButton(text=button_text, callback_data=NEXT_STAGE_CALLBACK, style="primary")]]
     )
 
 
@@ -32,9 +32,9 @@ def reminder_keyboard(
     """
     rows: list[list[InlineKeyboardButton]] = []
     if chat_url:
-        rows.append([InlineKeyboardButton(text=CHAT_BUTTON_TEXT, url=chat_url)])
+        rows.append([InlineKeyboardButton(text=CHAT_BUTTON_TEXT, url=chat_url, style="primary")])
     if curator_url:
-        rows.append([InlineKeyboardButton(text=CURATOR_BUTTON_TEXT, url=curator_url)])
+        rows.append([InlineKeyboardButton(text=CURATOR_BUTTON_TEXT, url=curator_url, style="primary")])
     return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
 
 
@@ -53,12 +53,12 @@ def start_notification_keyboard(
     (якщо задано в таблиці) кнопки чату та ментора.
     """
     rows: list[list[InlineKeyboardButton]] = [
-        [InlineKeyboardButton(text="Далі", callback_data=NEXT_STAGE_CALLBACK)],
+        [InlineKeyboardButton(text="Далі", callback_data=NEXT_STAGE_CALLBACK, style="primary")],
     ]
     if chat_url:
-        rows.append([InlineKeyboardButton(text=WELCOME_CHAT_BUTTON_TEXT, url=chat_url)])
+        rows.append([InlineKeyboardButton(text=WELCOME_CHAT_BUTTON_TEXT, url=chat_url, style="primary")])
     if mentor_url:
-        rows.append([InlineKeyboardButton(text=WELCOME_MENTOR_BUTTON_TEXT, url=mentor_url)])
+        rows.append([InlineKeyboardButton(text=WELCOME_MENTOR_BUTTON_TEXT, url=mentor_url, style="primary")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -78,9 +78,9 @@ def access_opened_keyboard(
     """
     rows: list[list[InlineKeyboardButton]] = []
     if include_next:
-        rows.append([InlineKeyboardButton(text=next_button_text, callback_data=NEXT_STAGE_CALLBACK)])
+        rows.append([InlineKeyboardButton(text=next_button_text, callback_data=NEXT_STAGE_CALLBACK, style="primary")])
     if group_url:
-        rows.append([InlineKeyboardButton(text=GROUP_BUTTON_TEXT, url=group_url)])
+        rows.append([InlineKeyboardButton(text=GROUP_BUTTON_TEXT, url=group_url, style="primary")])
     if curator_url:
-        rows.append([InlineKeyboardButton(text=CURATOR_BUTTON_TEXT, url=curator_url)])
+        rows.append([InlineKeyboardButton(text=CURATOR_BUTTON_TEXT, url=curator_url, style="primary")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
