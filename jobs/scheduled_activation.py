@@ -193,8 +193,12 @@ async def process_reminders(
 
         # найтерміновіше нагадування (найменше годин до старту)
         hours_to_send = min(due)
-        # у пре-стартові нагадування додаємо кнопки чату/куратора тарифу
-        keyboard = reminder_keyboard(chat_url=plan.chat_url, curator_url=plan.curator_url)
+        # У нагадування за день додаємо групу потоку, якщо вона задана в Streams.
+        keyboard = reminder_keyboard(
+            chat_url=plan.chat_url,
+            curator_url=plan.curator_url,
+            group_url=stream.telegram_group_url if hours_to_send == 24 else None,
+        )
         sent_ok = await notify_participant(
             bot, p, _reminder_text(hours_to_send, plan.start_date), reply_markup=keyboard,
         )

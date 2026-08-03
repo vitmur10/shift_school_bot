@@ -24,13 +24,16 @@ CHAT_BUTTON_TEXT = "💬 Чат потоку"
 def reminder_keyboard(
     chat_url: str | None = None,
     curator_url: str | None = None,
+    group_url: str | None = None,
 ) -> InlineKeyboardMarkup | None:
     """
-    Клавіатура для пре-стартових нагадувань (scheduled-тариф): кнопки чату
-    та куратора, якщо відповідні посилання задані в Plans. Якщо обидва
+    Клавіатура для пре-стартових нагадувань (scheduled-тариф): кнопки групи,
+    чату та куратора, якщо відповідні посилання задані в таблиці. Якщо всі
     порожні — повертає None (повідомлення піде без клавіатури).
     """
     rows: list[list[InlineKeyboardButton]] = []
+    if group_url:
+        rows.append([InlineKeyboardButton(text=GROUP_BUTTON_TEXT, url=group_url, style="primary")])
     if chat_url:
         rows.append([InlineKeyboardButton(text=CHAT_BUTTON_TEXT, url=chat_url, style="primary")])
     if curator_url:
