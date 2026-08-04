@@ -130,6 +130,7 @@ async def _try_send_notification(
     keyboard = start_notification_keyboard(
         chat_url=plan.chat_url if plan else None,
         mentor_url=plan.curator_url if plan else None,
+        group_url=stream.telegram_group_url if stream else None,
     )
     sent_ok = await notify_scheduled_access_opened(bot, participant, reply_markup=keyboard)
     if sent_ok:

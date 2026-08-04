@@ -180,6 +180,7 @@ async def _show_access_state(
             reply_markup=start_notification_keyboard(
                 chat_url=plan.chat_url if plan else None,
                 mentor_url=plan.curator_url if plan else None,
+                group_url=stream.telegram_group_url if stream else None,
             ),
         )
         return
