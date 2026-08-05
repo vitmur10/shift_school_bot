@@ -4,8 +4,8 @@
 Ідемпотентний і БЕЗПЕЧНИЙ скрипт: нічого не видаляє й не перевпорядковує,
 лише додає те, чого бракує:
 
-  1. Streams  -> колонка `telegram_group_url` (якщо немає)
-  2. Plans    -> колонка `curator_url` (якщо немає)
+  1. Streams  -> колонка `telegram_group_url` (legacy, якщо немає)
+  2. Plans    -> колонки `curator_url`, `chat_url`, `telegram_group_url` (якщо немає)
   3. Leads    -> створює лист із заголовками (якщо листа немає)
   4. Participants -> лише ПЕРЕВІРЯЄ порядок колонок і попереджає, якщо він
      не збігається з тим, що очікує код (append учасника пише за позицією!).
@@ -54,7 +54,7 @@ BROADCASTS_COLUMN_ORDER = [
 ]
 
 STREAMS_NEW_COLUMNS = ["telegram_group_url"]
-PLANS_NEW_COLUMNS = ["curator_url", "chat_url"]
+PLANS_NEW_COLUMNS = ["curator_url", "chat_url", "telegram_group_url"]
 STAGES_NEW_COLUMNS = ["only_scheduled", "plan_ids"]
 
 SHEET_STREAMS = "Streams"

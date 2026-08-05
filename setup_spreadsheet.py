@@ -46,6 +46,7 @@ SHEETS = {
     ],
     "Plans": [
         "plan_id", "stream_id", "plan_type", "title", "start_date", "is_active",
+        "curator_url", "chat_url", "telegram_group_url",
     ],
     "Participants": [
         "participant_id", "telegram_id", "telegram_username", "phone_number",

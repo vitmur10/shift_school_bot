@@ -111,6 +111,9 @@ class Plan:
     curator_url: str | None = None
     # посилання на чат тарифу. Опціонально: порожньо — кнопки «Чат» не буде.
     chat_url: str | None = None
+    # посилання на групу потоку для цього тарифу.
+    # Опціонально: якщо порожньо — кнопки «Група потоку» не буде.
+    telegram_group_url: str | None = None
 
     def is_scheduled(self) -> bool:
         return self.plan_type == PlanType.SCHEDULED
@@ -125,8 +128,8 @@ class Stream:
     is_active: bool = True
     stages: list[Stage] = field(default_factory=list)   # відсортовані за order
     plans: dict[str, Plan] = field(default_factory=dict)  # plan_id -> Plan
-    # інвайт-посилання на телеграм-групу цього потоку (self-service у таблиці).
-    # Опціонально: якщо порожньо — кнопки «Група потоку» не буде.
+    # Legacy-посилання на телеграм-групу потоку. Кнопки для учасників
+    # беруться з Plans.telegram_group_url, щоб керувати доступом по тарифах.
     telegram_group_url: str | None = None
 
     def get_stage(self, order: int) -> Stage | None:
@@ -141,13 +144,6 @@ class Stream:
 
     def get_plan(self, plan_id: str) -> Plan | None:
         return self.plans.get(plan_id)
-
-    def default_curator_url(self) -> str | None:
-        """Повертає перше заповнене посилання на ментора серед тарифів потоку."""
-        for plan in self.plans.values():
-            if plan.curator_url:
-                return plan.curator_url
-        return None
 
 
 @dataclass

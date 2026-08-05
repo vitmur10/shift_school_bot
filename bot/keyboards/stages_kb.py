@@ -79,7 +79,7 @@ def access_opened_keyboard(
 
     Завжди містить «Далі» (перехід до першого етапу), і додатково — URL-кнопки
     «Група потоку» та «Написати куратору», якщо відповідні посилання задані
-    у таблиці (Streams.telegram_group_url, Plans.curator_url). Якщо обидва
+    у таблиці (Plans.telegram_group_url, Plans.curator_url). Якщо обидва
     порожні — поводиться точно як next_stage_keyboard (нічого не ламає).
     """
     rows: list[list[InlineKeyboardButton]] = []

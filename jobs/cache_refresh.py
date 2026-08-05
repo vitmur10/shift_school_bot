@@ -263,6 +263,8 @@ def build_cache_from_raw(
             if row.get("curator_url") else None,
             chat_url=(str(row.get("chat_url")).strip() or None)
             if row.get("chat_url") else None,
+            telegram_group_url=(str(row.get("telegram_group_url")).strip() or None)
+            if row.get("telegram_group_url") else None,
         )
 
     for i, row in enumerate(participants_rows):
