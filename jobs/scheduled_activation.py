@@ -127,9 +127,13 @@ async def _try_send_notification(
     """Допоміжна: спроба надіслати сповіщення + оновити notification_sent при успіху."""
     stream = cache.get_stream(participant.stream_id)
     plan = stream.get_plan(participant.plan_id) if stream else None
+    curator_url = (
+        (plan.curator_url if plan else None)
+        or (stream.default_curator_url() if stream else None)
+    )
     keyboard = start_notification_keyboard(
         chat_url=plan.chat_url if plan else None,
-        mentor_url=plan.curator_url if plan else None,
+        mentor_url=curator_url,
         group_url=stream.telegram_group_url if stream else None,
     )
     sent_ok = await notify_scheduled_access_opened(bot, participant, reply_markup=keyboard)
@@ -195,9 +199,10 @@ async def process_reminders(
         # найтерміновіше нагадування (найменше годин до старту)
         hours_to_send = min(due)
         # У нагадування за день додаємо групу потоку, якщо вона задана в Streams.
+        curator_url = plan.curator_url or stream.default_curator_url()
         keyboard = reminder_keyboard(
             chat_url=plan.chat_url,
-            curator_url=plan.curator_url,
+            curator_url=curator_url,
             group_url=stream.telegram_group_url if hours_to_send == 24 else None,
         )
         sent_ok = await notify_participant(

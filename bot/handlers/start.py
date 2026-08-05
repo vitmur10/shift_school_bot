@@ -175,11 +175,15 @@ async def _show_access_state(
         # а також (якщо задано в таблиці) кнопки групи потоку та куратора.
         stream = cache.get_stream(participant.stream_id)
         plan = stream.get_plan(participant.plan_id) if stream else None
+        curator_url = (
+            (plan.curator_url if plan else None)
+            or (stream.default_curator_url() if stream else None)
+        )
         await message.answer(
             ACCESS_GRANTED_FIRST_TIME,
             reply_markup=start_notification_keyboard(
                 chat_url=plan.chat_url if plan else None,
-                mentor_url=plan.curator_url if plan else None,
+                mentor_url=curator_url,
                 group_url=stream.telegram_group_url if stream else None,
             ),
         )

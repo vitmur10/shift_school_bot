@@ -142,6 +142,13 @@ class Stream:
     def get_plan(self, plan_id: str) -> Plan | None:
         return self.plans.get(plan_id)
 
+    def default_curator_url(self) -> str | None:
+        """Повертає перше заповнене посилання на ментора серед тарифів потоку."""
+        for plan in self.plans.values():
+            if plan.curator_url:
+                return plan.curator_url
+        return None
+
 
 @dataclass
 class Participant:
